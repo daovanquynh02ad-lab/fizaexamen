@@ -16,18 +16,19 @@
     <script src="questions.js"></script>
 
     <style>
-        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
+        /* ГЛОБАЛЬНЫЙ СБРОС */
         html, body {
-            overscroll-behavior-y: none;
-            /* Разрешаем стандартные жесты, но контролируем их JS */
-            touch-action: pan-x pan-y; 
+            overscroll-behavior: none;
+            touch-action: pan-x pan-y;
             height: 100%;
+            height: 100dvh; /* ДИНАМИЧЕСКАЯ ВЫСОТА (FIX) */
             width: 100%;
             background-color: #000;
             color: #000;
             font-family: 'Inter', sans-serif;
             -webkit-tap-highlight-color: transparent;
             overflow: hidden;
+            margin: 0; padding: 0;
         }
 
         #mobile-wrapper {
@@ -39,14 +40,15 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            margin: 0 auto;
         }
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* ОТСТУП ПОД СИСТЕМНУЮ ШАПКУ */
-        .safe-header-spacing {
-            padding-top: calc(env(safe-area-inset-top) + 46px); 
-            padding-bottom: 8px;
+        /* HEADER: МИНИМАЛЬНЫЙ ОТСТУП ПОД КНОПКИ ТГ */
+        .safe-header {
+            padding-top: calc(env(safe-area-inset-top) + 10px); 
+            padding-bottom: 10px;
             padding-left: 16px;
             padding-right: 16px;
             width: 100%;
@@ -56,6 +58,7 @@
             align-items: center;
             justify-content: space-between;
             flex-shrink: 0;
+            min-height: 60px; /* Фиксируем высоту шапки */
         }
 
         /* 3D КАРТОЧКИ */
@@ -70,9 +73,20 @@
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             touch-action: pan-y;
+            flex: 1; /* Занимает всё свободное место */
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* НИЖНЯЯ ПАНЕЛЬ (КНОПКИ) */
+        .bottom-panel {
+            padding: 16px;
+            padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
+            background-color: inherit;
+            z-index: 40;
+            flex-shrink: 0; /* Не сжимать */
+            width: 100%;
+        }
 
         /* АНИМАЦИИ */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -145,7 +159,7 @@
 <script>
 
 // =================================================================
-// 1. СТАРТ И НАСТРОЙКИ
+// 1. СТАРТ
 // =================================================================
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
@@ -163,7 +177,7 @@ try {
     tg.setHeaderColor('#ffffff'); 
 } catch(e) {}
 
-// === ОБРАБОТКА КНОПКИ НАЗАД ОТ ТЕЛЕГРАМА ===
+// КНОПКА НАЗАД
 tg.BackButton.onClick(function() {
     goHome();
 });
@@ -347,7 +361,7 @@ function processQuestions() {
 }
 
 // =================================================================
-// 3. STATE & LOGIC
+// 3. STATE
 // =================================================================
         
 const state = {
@@ -443,7 +457,7 @@ function startMode(mode, isResume = false) {
     state.resumeState = null;
     resetQuestionState();
     
-    updateBackButton(); // Показываем кнопку "Назад"
+    updateBackButton();
     render();
 }
 
@@ -533,7 +547,7 @@ function goHome() {
         }
     }
     state.view = 'menu';
-    updateBackButton(); // Скрываем кнопку "Назад"
+    updateBackButton(); 
     render();
 }
 
@@ -555,7 +569,6 @@ function render() {
     const filterList = document.getElementById('topics-list');
     if(filterList) filterScrollPos = filterList.scrollTop;
     
-    // Запоминаем скролл в приложении
     let appScrollPos = 0;
     const appScroll = document.querySelector('.scroll-y-auto');
     if(appScroll) appScrollPos = appScroll.scrollTop;
@@ -574,7 +587,6 @@ function render() {
     
     if (state.view === 'cards') setTimeout(initCardEvents, 0);
 
-    // Восстанавливаем скролл (если мы в том же режиме)
     const newAppScroll = document.querySelector('.scroll-y-auto');
     if(newAppScroll && appScrollPos > 0) newAppScroll.scrollTop = appScrollPos;
 
@@ -588,7 +600,7 @@ function render() {
 function renderHeader() {
     const isHome = state.view === 'menu';
     return `
-    <div class="safe-header-spacing bg-slate-50 dark:bg-black transition-colors shadow-sm">
+    <div class="safe-header bg-slate-50 dark:bg-black transition-colors shadow-sm">
         <div class="flex items-center gap-3">
             ${!isHome && !tg.initData ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
@@ -628,7 +640,7 @@ function renderFilterModal() {
     QUESTIONS_DATA.forEach(q => { topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1; });
 
     return `
-    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full safe-header-spacing" onclick="if(event.target === this) toggleFilterModal(false)">
+    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full safe-header" style="padding:0; padding-bottom: 20px;" onclick="if(event.target === this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col max-h-[85vh] mb-4">
             <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3>
@@ -773,7 +785,7 @@ function renderLearn() {
     const questions = getFilteredQuestions('learn');
     return `
     <div class="flex flex-col h-full w-full">
-        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 safe-header-spacing">
+        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 safe-header">
             <div class="flex items-center gap-3" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
@@ -872,18 +884,8 @@ function renderQuiz() {
     }
 
     return `
-    <div class="flex flex-col h-full relative animate-fade-in w-full safe-header-spacing" style="padding-top: 0 !important;">
-        <div class="safe-header-spacing"></div>
-
-        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
-            <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
-        </button>
-
-        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90">
-            <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
-        </button>
-
-        <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 flex-shrink-0">
+    <div class="flex flex-col h-full relative animate-fade-in w-full">
+        <div class="safe-header"></div> <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 flex-shrink-0">
             <div class="h-full bg-black dark:bg-white transition-all duration-300 ease-out" style="width: ${progressPct}%"></div>
         </div>
 
@@ -916,7 +918,15 @@ function renderQuiz() {
             </div>
         </div>
 
-        <div class="fixed bottom-0 left-0 w-full bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 pb-8 z-20 transition-colors absolute-width">
+        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
+            <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
+        </button>
+
+        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90">
+            <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
+        </button>
+
+        <div class="bottom-panel bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
             <div class="max-w-xl mx-auto">
                 ${!state.isAnswerChecked ? `
                     <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
@@ -935,26 +945,6 @@ function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
     
-    // ДОБАВЛЯЕМ ОБРАБОТЧИК СВАЙПА ВЛЕВО ДЛЯ ВЫХОДА (НАВИГАЦИЯ НАЗАД)
-    document.addEventListener('touchstart', (e) => {
-        // Если жест от левого края (первые 30px)
-        if (e.changedTouches[0].clientX < 30) {
-            window.isSwipeBack = true;
-            window.swipeBackStartX = e.changedTouches[0].clientX;
-        } else {
-            window.isSwipeBack = false;
-        }
-    });
-
-    document.addEventListener('touchend', (e) => {
-        if (window.isSwipeBack) {
-            const diff = e.changedTouches[0].clientX - window.swipeBackStartX;
-            if (diff > 50) goHome(); // Если свайпнули вправо - назад
-            window.isSwipeBack = false;
-        }
-    });
-
-    // СОБЫТИЯ КАРТОЧКИ
     card.addEventListener('pointerdown', (e) => {
         if (state.animState !== 'idle') return;
         isCardDragging = true;
@@ -1050,17 +1040,16 @@ function renderCards() {
 
     const question = state.playableQuestions[state.currentQuestionIndex];
     const imageBlock = question.image ? `
-        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
+        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700 flex-shrink-0">
             <img src="${question.image}" class="w-full h-full object-contain" alt="Card Image">
         </div>
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
-    // ДИЗАЙН "БИОХИМИЯ" - ВСЁ СВЕРХУ, БЕЗ ЦЕНТРИРОВАНИЯ
     return `
-    <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full safe-header-spacing" style="padding-top: 0 !important;">
+    <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full" style="padding-top: 0 !important;">
             
-            <div class="safe-header-spacing"></div> <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">
+            <div class="safe-header"></div> <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">
                 ${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}
             </div>
 
