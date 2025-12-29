@@ -85,14 +85,18 @@
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
 
-        /* ЗАГРУЗКА */
-        #intro-layer, #auth-screen {
+        /* ЗАГРУЗКА И ОШИБКИ */
+        #intro-layer, #auth-screen, #block-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 9999;
+            z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
+        #intro-layer { background: #000; }
+        #auth-screen, #block-screen { background-color: inherit; } /* Наследует тему */
+        
         #intro-video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
         #start-text { z-index: 10000; cursor: pointer; position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        
         .hidden-force { display: none !important; }
         #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
     </style>
@@ -114,18 +118,31 @@
             <div class="text-white font-bold text-base tracking-[0.2em] uppercase animate-pulse-text text-center px-4">Нажмите, чтобы начать</div>
         </div>
     </div>
-    <!-- ЗАГРУЗКА -->
+    
+    <!-- ЗАГРУЗКА (Спиннер) -->
     <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
         <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
         <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
+
+    <!-- БЛОКИРОВКА (Доступ закрыт) -->
+    <div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center">
+        <!-- Контент вставляется JS -->
+    </div>
+
     <!-- ПРИЛОЖЕНИЕ -->
     <div id="app" class="hidden-force"></div>
 </div>
 
 <script>
+// --- КОНФИГУРАЦИЯ ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
-let accessData = null; let videoFinished = false; let accessError = null;
+
+// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
+let accessData = null; 
+let videoFinished = false; 
+let accessError = null; // { type: 'denied' | 'network' | 'file', msg: '' }
+
 const tg = window.Telegram.WebApp;
 
 try { 
@@ -142,50 +159,151 @@ function haptic(type='light') {
     } else if(navigator.vibrate) navigator.vibrate(10);
 }
 
+// Свайп "назад" (Глобальный)
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
 document.addEventListener('touchend', (e)=>{if(!window.sw)return;const ex=e.changedTouches[0].clientX;const ey=e.changedTouches[0].clientY;if((ex-window.sx)>60 && Math.abs(ey-window.sy)<50){haptic('medium');goHome();}window.sw=false},{passive:true});
 
+// СТАРТ
 async function userClickedStart() {
     haptic('medium'); 
     const txt = document.getElementById('start-text'); if(txt) txt.remove();
     const vid=document.getElementById('intro-video');
-    let played = false;
-    try { vid.muted=false; await vid.play(); played = true; vid.onended=()=>{ finishVideo(); }; } catch(err){ console.log("Video fail", err); }
-    if (!played) finishVideo();
+    
+    // Запускаем проверку доступа ПАРАЛЛЕЛЬНО с видео
     performAccessCheck();
+
+    let played = false;
+    try { 
+        vid.muted=false; 
+        await vid.play(); 
+        played = true; 
+        vid.onended=()=>{ finishVideo(); }; 
+    } catch(err){ console.log("Video fail", err); }
+    
+    if (!played) finishVideo();
 }
 
 function finishVideo() { videoFinished = true; checkStateTransition(); }
 
+// --- ПРОВЕРКА ДОСТУПА ---
 async function performAccessCheck() {
-    if(typeof physiology_questions==='undefined'){ accessError={type:'file',msg:'Файл questions.js не найден.'};checkStateTransition();return;}
-    const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
-    if(window.location.protocol==='file:'){ accessData={allowed:true};processQuestions();checkStateTransition();return;}
-    if(!userId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
+    if(typeof physiology_questions==='undefined'){ 
+        accessError={type:'file',msg:'Файл questions.js не найден.'};
+        checkStateTransition();
+        return;
+    }
     
-    const ck = `imed_access_v1_${userId}`; const c = localStorage.getItem(ck);
-    if(c){ try{const p=JSON.parse(c);if(p.allowed){accessData=p;processQuestions();checkStateTransition();return;}}catch(e){localStorage.removeItem(ck);} }
+    const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
+    
+    // Локальный тест (для разработки)
+    if(window.location.protocol==='file:'){ accessData={allowed:true};processQuestions();checkStateTransition();return;}
 
+    if(!userId){ 
+        accessError={type:'browser',msg:'Зайдите через Telegram.'};
+        checkStateTransition();
+        return;
+    }
+    
+    // Кэш
+    const ck = `imed_access_v1_${userId}`; const c = localStorage.getItem(ck);
+    if(c){ 
+        try{
+            const p=JSON.parse(c);
+            if(p.allowed){ accessData=p; processQuestions(); checkStateTransition(); return; }
+        } catch(e){ localStorage.removeItem(ck); } 
+    }
+
+    // Запрос к Google Script
     try{
         const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
         const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`,{signal:ctrl.signal});
         const data=await res.json();
-        if(data.allowed){ accessData=data; localStorage.setItem(ck,JSON.stringify(data)); processQuestions(); }
-        else accessError={type:'denied',msg:'Доступ закрыт.'};
-    } catch(e){ accessError={type:'network',msg:'Ошибка сети.'}; }
+        
+        if(data.allowed){ 
+            accessData=data; 
+            localStorage.setItem(ck,JSON.stringify(data)); 
+            processQuestions(); 
+        } else {
+            // ДОСТУП ЗАПРЕЩЕН
+            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
+        }
+    } catch(e){ 
+        accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
+    }
     checkStateTransition();
 }
 
+// --- УПРАВЛЕНИЕ ЭКРАНАМИ (ИНТРО -> ЗАГРУЗКА -> ПРИЛОЖЕНИЕ/ОШИБКА) ---
 function checkStateTransition() {
-    if(!videoFinished) return;
+    // Ждем окончания видео (или клика, если видео не пошло)
+    // НО если уже есть ошибка (нет инета), можем показать её сразу, не дожидаясь видео?
+    // Для красоты лучше дождаться конца видео.
+    if(!videoFinished && !accessError) return; 
+    
     const intro=document.getElementById('intro-layer');
     const auth=document.getElementById('auth-screen');
+    const block=document.getElementById('block-screen');
     const app=document.getElementById('app');
-    if(accessError){ if(intro) intro.style.display='none'; auth.classList.remove('hidden-force'); auth.innerHTML=`<div class="p-6 text-center"><h1 class="text-2xl font-bold mb-2">Ошибка</h1><p>${accessError.msg}</p></div>`; return; }
+
+    // Если видео закончилось, но проверка еще идет -> показываем спиннер
+    if (videoFinished && !accessData && !accessError) {
+        if(intro) intro.style.display='none';
+        auth.classList.remove('hidden-force');
+        return;
+    }
+
+    // Если есть ошибка (доступ закрыт или сеть)
+    if(accessError){ 
+        if(intro) intro.style.display='none'; 
+        auth.classList.add('hidden-force'); // Скрываем спиннер
+        block.classList.remove('hidden-force'); // Показываем блок
+        
+        let icon = 'alert-triangle';
+        let title = 'Ошибка';
+        let colorClass = 'text-rose-500';
+        let bgClass = 'bg-rose-100 dark:bg-rose-900/30';
+
+        if (accessError.type === 'denied') {
+            icon = 'lock';
+            title = 'Доступ закрыт';
+        } else if (accessError.type === 'browser') {
+            icon = 'smartphone';
+            title = 'Только в Telegram';
+        }
+
+        block.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full animate-fade-in">
+                <div class="${bgClass} p-5 rounded-full mb-6">
+                    <i data-lucide="${icon}" class="w-12 h-12 ${colorClass}"></i>
+                </div>
+                <h1 class="text-2xl font-black text-slate-900 dark:text-white mb-3">${title}</h1>
+                <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-xs font-medium leading-relaxed">
+                    ${accessError.msg}
+                </p>
+                ${accessError.type === 'denied' ? 
+                `<a href="https://t.me/stewonly" class="bg-black dark:bg-white text-white dark:text-black px-8 py-4 rounded-2xl font-bold text-sm shadow-lg btn-click">Связаться с админом</a>` : ''}
+            </div>
+        `;
+        lucide.createIcons();
+        return; 
+    }
+
+    // Успех -> Вход в приложение
     if(accessData){
-        if(intro){ intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; setTimeout(()=>{intro.style.display='none';app.classList.remove('hidden-force');init();},300); } 
-        else { app.classList.remove('hidden-force'); init(); }
-    } else { if(intro) intro.style.display='none'; auth.classList.remove('hidden-force'); }
+        if(intro){ 
+            intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; 
+            setTimeout(()=>{
+                intro.style.display='none';
+                auth.classList.add('hidden-force');
+                app.classList.remove('hidden-force');
+                init();
+            },300); 
+        } else { 
+            auth.classList.add('hidden-force');
+            app.classList.remove('hidden-force'); 
+            init(); 
+        }
+    }
 }
 
 const TOPIC_MAP = [
@@ -257,9 +375,18 @@ const state = { view: 'menu', isDark: false, showFilterModal: false, selectedTop
 function init() { render(); }
 function toggleTheme() {
     haptic('light'); state.isDark = !state.isDark;
-    const body=document.documentElement, auth=document.getElementById('auth-screen');
-    if(state.isDark) { body.classList.add('dark'); if(auth)auth.style.backgroundColor='#000'; try{tg.setHeaderColor('#000000');}catch(e){} }
-    else { body.classList.remove('dark'); if(auth)auth.style.backgroundColor='#fff'; try{tg.setHeaderColor('#ffffff');}catch(e){} }
+    const body=document.documentElement, auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen');
+    if(state.isDark) { 
+        body.classList.add('dark'); 
+        if(auth)auth.style.backgroundColor='#000'; 
+        if(block)block.style.backgroundColor='#000';
+        try{tg.setHeaderColor('#000000');}catch(e){} 
+    } else { 
+        body.classList.remove('dark'); 
+        if(auth)auth.style.backgroundColor='#fff'; 
+        if(block)block.style.backgroundColor='#fff';
+        try{tg.setHeaderColor('#ffffff');}catch(e){} 
+    }
     render();
 }
 function toggleFilterModal(show) { if(show)haptic('light'); state.showFilterModal=show; render(); }
@@ -469,7 +596,6 @@ function renderQuizFinished() {
     </div>`;
 }
 
-// ЛОГИКА КАРТОЧЕК
 function renderCardsContent() {
     if(!state.playableQuestions.length) return renderQuizFinished();
     const q=state.playableQuestions[state.currentQuestionIndex];
