@@ -16,9 +16,9 @@
     <script src="questions.js"></script>
 
     <style>
-        /* ОТКЛЮЧЕНИЕ "РЕЗИНКИ" НА IOS */
+        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
         html, body {
-            overscroll-behavior-y: none; 
+            overscroll-behavior: none; /* Блокируем резинку */
             touch-action: pan-x pan-y;
         }
         
@@ -30,7 +30,7 @@
             padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start; /* Прижимаем к верху */
             height: 100vh;
             width: 100vw;
             overflow: hidden;
@@ -51,33 +51,38 @@
         @media (max-width: 480px) { #mobile-wrapper { max-width: 100%; box-shadow: none; } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* 3D КАРТОЧКИ (ВАЖНЫЕ ФИКСЫ) */
+        /* КАРТОЧКИ И 3D */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
-        
-        /* Исправление для Safari/iPhone */
-        .backface-hidden { 
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden; 
-        }
+        .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
         /* СКРОЛЛ */
         .scroll-container {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
-            overscroll-behavior-y: contain; /* Скролл только внутри блока */
+            overscroll-behavior-y: contain;
             flex: 1;
             position: relative;
-            padding-bottom: 80px; /* Место для скролла внизу */
+            padding-bottom: 40px;
         }
+        /* Скролл внутри карточки */
+        .card-scroll {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            flex: 1;
+            width: 100%;
+            min-height: 0; /* Важно для flex-контейнера */
+        }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* ОТСТУПЫ */
-        .header-spacing { 
-            padding-top: calc(10px + env(safe-area-inset-top)); 
-            min-height: 60px;
+        /* ШАПКА - МИНИМАЛЬНАЯ ВЫСОТА */
+        .header-compact { 
+            padding-top: env(safe-area-inset-top); /* Только челка, ни пикселем больше */
+            height: auto;
+            min-height: 50px;
         }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -178,7 +183,7 @@ const tg = window.Telegram.WebApp;
 try { 
     tg.expand(); 
     if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
-    tg.setHeaderColor('#f8fafc'); 
+    tg.setHeaderColor('#ffffff'); // Ставим белый, чтобы сливался (или черный в теме)
 } catch(e) {}
 
 async function userClickedStart() {
@@ -406,7 +411,7 @@ function toggleTheme() {
         document.documentElement.classList.remove('dark');
         wrapper.classList.remove('dark');
         auth.style.backgroundColor = '#fff';
-        try { tg.setHeaderColor('#f8fafc'); } catch(e){}
+        try { tg.setHeaderColor('#ffffff'); } catch(e){}
     }
     render();
 }
@@ -586,8 +591,9 @@ function render() {
 
 function renderHeader() {
     const isHome = state.view === 'menu';
+    // HEADER-COMPACT класс для минимального отступа
     return `
-    <div class="bg-slate-50 dark:bg-black relative z-50 px-4 flex items-center justify-between transition-colors shadow-sm flex-shrink-0 header-spacing">
+    <div class="header-compact bg-slate-50 dark:bg-black relative z-50 px-4 flex items-center justify-between transition-colors shadow-sm flex-shrink-0">
         <div class="flex items-center gap-3">
             ${!isHome ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
@@ -772,21 +778,18 @@ function renderLearn() {
     const questions = getFilteredQuestions('learn');
     return `
     <div class="flex flex-col h-full w-full">
-        
-        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 header-spacing">
+        <div id="learn-header" class="header-compact flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-3" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
                 </button>
                 <h2 class="font-black text-xl text-slate-900 dark:text-white font-sans">Конспект</h2>
             </div>
-            
             <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
                 <i data-lucide="${state.hideAnswersInLearn ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>
                 ${state.hideAnswersInLearn ? 'Ответы' : 'Скрыть'}
             </button>
         </div>
-
         <div class="scroll-container p-4 space-y-6 w-full">
             ${questions.map((q, idx) => `
                 <div class="border border-black dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-black shadow-sm">
@@ -935,7 +938,6 @@ function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
     
-    // ИСПРАВЛЕННАЯ ЛОГИКА ДЛЯ АЙФОНОВ
     card.addEventListener('touchstart', (e) => {
         if (state.animState !== 'idle') return;
         isCardDragging = true;
@@ -957,7 +959,6 @@ function initCardEvents() {
         isCardDragging = false;
         const SWIPE_THRESHOLD = 60;
         
-        // ЕСЛИ ЭТО БЫЛ КЛИК (СМЕЩЕНИЕ < 5px) -> ПЕРЕВОРАЧИВАЕМ
         if (Math.abs(state.swipeX) < 5) {
             toggleFlip();
             card.style.transition = 'transform 0.3s ease-out';
@@ -1039,6 +1040,7 @@ function renderCards() {
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
+    // Скролл внутри карточки добавлен через card-scroll
     return `
     <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full">
             <div class="flex justify-center mb-4 text-xs font-black text-slate-300 dark:text-slate-700">
@@ -1049,27 +1051,29 @@ function renderCards() {
                 <div id="flashcard" class="w-full h-full relative" style="transform: translate(0px, 0px);">
                     <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped ? 'rotate-y-180' : ''}">
                         
-                        <div class="absolute inset-0 backface-hidden flex flex-col items-center p-6 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
+                        <div class="absolute inset-0 backface-hidden flex flex-col items-center p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
                             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
-                            <div class="w-full flex-1 overflow-y-auto no-scrollbar flex flex-col items-center">
+                            
+                            <div class="card-scroll flex flex-col items-center no-scrollbar">
                                 ${imageBlock}
                                 <h3 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-snug text-center mb-6">${question.question}</h3>
                                 <div class="w-full space-y-2 mb-4">
                                     ${question.options.map((opt, i) => `
-                                        <div class="w-full p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-sm font-medium text-slate-600 dark:text-slate-400 text-left">
+                                        <div class="w-full p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 text-left">
                                             ${opt}
                                         </div>
                                     `).join('')}
                                 </div>
                             </div>
-                            <div class="mt-4 text-slate-400 text-xs font-bold flex items-center gap-1 opacity-50 shrink-0">
+                            
+                            <div class="mt-2 text-slate-400 text-xs font-bold flex items-center gap-1 opacity-50 shrink-0">
                                 <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа
                             </div>
                         </div>
 
                         <div class="absolute inset-0 backface-hidden bg-black dark:bg-white p-8 flex flex-col items-center justify-center text-center text-white dark:text-black rounded-[2rem] shadow-2xl rotate-y-180">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
-                            <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar">
+                            <div class="card-scroll flex flex-col items-center justify-center no-scrollbar">
                                 <div class="text-xl sm:text-2xl font-bold mb-6 text-[#FFD700] dark:text-blue-600 select-none leading-snug">
                                     ${correctText}
                                 </div>
