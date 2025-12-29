@@ -45,9 +45,10 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER: ОТСТУП СОХРАНЕН --- */
+        /* --- HEADER: ПОДНЯЛ ИНТЕРФЕЙС ВЫШЕ --- */
         .safe-header {
-            padding-top: calc(env(safe-area-inset-top) + 70px); 
+            /* Было + 70px, стало + 10px. Это уберет лишнюю дырку сверху */
+            padding-top: calc(env(safe-area-inset-top) + 10px); 
             padding-bottom: 12px;
             padding-left: 16px;
             padding-right: 16px;
@@ -68,7 +69,7 @@
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* --- СКРОЛЛ: ОТСТУП СОХРАНЕН --- */
+        /* --- СКРОЛЛ --- */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
@@ -80,12 +81,10 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* --- НИЖНЯЯ ПАНЕЛЬ: ИСПРАВЛЕНИЕ ПОЗИЦИОНИРОВАНИЯ --- */
+        /* --- НИЖНЯЯ ПАНЕЛЬ (Центровка сохранена) --- */
         .bottom-panel {
             position: fixed;
             bottom: 0;
-            
-            /* ИСПРАВЛЕНО: Вместо transform используем margin auto + left/right 0 */
             left: 0;
             right: 0;
             margin: 0 auto;
