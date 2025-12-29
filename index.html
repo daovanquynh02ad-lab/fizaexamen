@@ -16,60 +16,68 @@
     <script src="questions.js"></script>
 
     <style>
-        /* СБРОС И FULLSCREEN */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        html, body {
+        /* ЖЕСТКАЯ ФИКСАЦИЯ ЭКРАНА */
+        html {
             overscroll-behavior: none; 
-            touch-action: pan-x pan-y;
-            height: 100%;
-            width: 100%;
-            background-color: #fff; /* Цвет фона под челкой */
-            color: #000;
-            font-family: 'Inter', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            overflow: hidden;
+            touch-action: none; /* Отключаем системные жесты браузера */
         }
         
-        body.dark { background-color: #000; color: #fff; }
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            background-color: #000;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            color: #000;
+        }
 
-        /* ОБОЛОЧКА */
         #mobile-wrapper {
             width: 100%;
+            max-width: 480px;
             height: 100%;
-            background-color: inherit;
+            background-color: #fff;
             position: relative;
             overflow: hidden;
             display: flex;
             flex-direction: column;
         }
-        
-        /* На ПК ограничиваем ширину, чтобы не растягивало */
-        @media (min-width: 481px) {
-            body { background-color: #000; display: flex; justify-content: center; }
-            #mobile-wrapper { max-width: 480px; box-shadow: 0 0 50px rgba(255,255,255,0.1); }
-        }
+        @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
+        .dark #mobile-wrapper { background-color: #000; }
 
-        /* 3D КАРТОЧКИ */
+        /* КАРТОЧКИ: 3D и ВМЕСТИМОСТЬ */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* ВАЖНО: Разрешаем клики внутри карточки */
-        .card-content { pointer-events: auto; }
+        /* Специальный класс для сжатия текста если не влезает */
+        .fit-content-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            overflow: hidden;
+        }
 
-        /* СКРОЛЛ */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
+        /* СКРОЛЛ ТОЛЬКО ТАМ ГДЕ НУЖНО */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
+            touch-action: pan-y; /* Разрешаем скролл внутри контейнера */
         }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         /* АНИМАЦИИ */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
 
@@ -94,6 +102,8 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         .hidden-force { display: none !important; }
+        
+        #app { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
     </style>
    
     <script>
@@ -110,7 +120,7 @@
 </head>
 <body class="bg-slate-50 text-slate-900 transition-colors duration-300 selection:bg-[#FFD700] selection:text-black">
 
-<div id="mobile-wrapper">
+<div id="mobile-wrapper" class="bg-slate-50 dark:bg-black">
 
     <div id="intro-layer">
         <video id="intro-video" playsinline preload="auto">
@@ -130,14 +140,14 @@
         <p class="text-slate-500 font-medium">Загрузка...</p>
     </div>
 
-    <div id="app" class="w-full h-full flex flex-col hidden-force"></div>
+    <div id="app" class="hidden-force"></div>
 
 </div>
 
 <script>
 
 // =================================================================
-// 1. СТАРТ И НАСТРОЙКИ
+// 1. НАСТРОЙКИ ТЕЛЕГРАМА (FULLSCREEN + NO SWIPE)
 // =================================================================
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
@@ -148,14 +158,19 @@ let accessError = null;
 
 const tg = window.Telegram.WebApp;
 
-// === FULLSCREEN SETTINGS ===
 try { 
-    tg.expand(); // Разворачиваем на всю высоту
-    if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
+    tg.expand(); // Развернуть
+    tg.requestFullscreen(); // ЗАПРОСИТЬ ПОЛНЫЙ ЭКРАН (Поднять под часы)
     
-    // Красим шапку в цвет фона, чтобы сливалось
-    // (Позже в toggleTheme будем менять цвет динамически)
-    tg.setHeaderColor('#ffffff'); 
+    // САМОЕ ВАЖНОЕ: Блокируем закрытие свайпом
+    if (tg.isVerticalSwipesEnabled !== undefined) {
+        tg.isVerticalSwipesEnabled = false; 
+    }
+    tg.disableVerticalSwipes(); // Дублирующий метод для надежности
+    
+    // Красим подложку
+    tg.setBackgroundColor("#ffffff");
+    tg.setHeaderColor("#ffffff"); 
 } catch(e) {}
 
 async function userClickedStart() {
@@ -369,17 +384,18 @@ function init() {
 
 function toggleTheme() {
     state.isDark = !state.isDark;
+    const wrapper = document.getElementById('mobile-wrapper');
     const auth = document.getElementById('auth-screen');
     if (state.isDark) {
-        document.body.classList.add('dark');
-        document.body.style.backgroundColor = '#000';
+        document.documentElement.classList.add('dark');
+        wrapper.classList.add('dark');
         auth.style.backgroundColor = '#000';
-        try { tg.setHeaderColor('#000000'); } catch(e){}
+        try { tg.setBackgroundColor('#000000'); tg.setHeaderColor('#000000'); } catch(e){}
     } else {
-        document.body.classList.remove('dark');
-        document.body.style.backgroundColor = '#fff';
+        document.documentElement.classList.remove('dark');
+        wrapper.classList.remove('dark');
         auth.style.backgroundColor = '#fff';
-        try { tg.setHeaderColor('#ffffff'); } catch(e){}
+        try { tg.setBackgroundColor('#ffffff'); tg.setHeaderColor('#ffffff'); } catch(e){}
     }
     render();
 }
@@ -559,9 +575,9 @@ function render() {
 
 function renderHeader() {
     const isHome = state.view === 'menu';
-    // Добавлен padding-top для безопасной зоны, но фон общий
+    // Добавлен padding-top + min-height для компенсации островка
     return `
-    <div class="w-full bg-slate-50 dark:bg-black flex-shrink-0 relative z-50 flex items-center justify-between shadow-sm transition-colors" style="padding-top: env(safe-area-inset-top); min-height: calc(60px + env(safe-area-inset-top));">
+    <div class="w-full bg-slate-50 dark:bg-black flex-shrink-0 relative z-50 flex items-center justify-between shadow-sm transition-colors" style="padding-top: max(10px, env(safe-area-inset-top));">
         <div class="px-4 py-3 w-full flex items-center justify-between">
             <div class="flex items-center gap-3">
                 ${!isHome ? `
@@ -748,7 +764,7 @@ function renderLearn() {
     const questions = getFilteredQuestions('learn');
     return `
     <div class="flex flex-col h-full w-full">
-        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
+        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800" style="padding-top: max(10px, env(safe-area-inset-top));">
             <div class="flex items-center gap-3" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
@@ -829,8 +845,8 @@ function renderQuiz() {
     const progressPct = ((state.currentQuestionIndex + 1) / state.playableQuestions.length) * 100;
     
     const imageBlock = question.image ? `
-        <div class="mb-6 rounded-2xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 flex justify-center">
-            <img src="${question.image}" class="w-auto h-auto max-h-[300px] object-contain" alt="Quiz Image">
+        <div class="mb-6 rounded-2xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 flex justify-center flex-shrink-0">
+            <img src="${question.image}" class="w-auto h-auto max-h-[25vh] object-contain" alt="Quiz Image">
         </div>
     ` : '';
 
@@ -869,11 +885,11 @@ function renderQuiz() {
 
             ${imageBlock}
 
-            <h3 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 mb-8 leading-snug">${question.question}</h3>
+            <h3 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${question.question}</h3>
 
             <div class="space-y-3 pb-32">
                 ${question.options.map((opt, idx) => {
-                    let btnStyle = "w-full p-5 rounded-2xl text-left font-semibold text-sm sm:text-base transition-all border relative ";
+                    let btnStyle = "w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative ";
                     if (!state.isAnswerChecked) {
                         if (state.selectedOptions.includes(idx)) btnStyle += "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.02]";
                         else btnStyle += "border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900";
@@ -909,14 +925,7 @@ function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
     
-    // ИСПОЛЬЗУЕМ POINTER EVENTS ДЛЯ МЫШИ И ТАЧА
     card.addEventListener('pointerdown', (e) => {
-        // Если клик по кнопке внутри карточки (например скроллбар) - не трогаем
-        if (e.target.closest('.card-scroll') && e.target.closest('.card-scroll').scrollHeight > e.target.closest('.card-scroll').clientHeight) {
-             // Но позволяем скроллить
-             return; 
-        }
-        
         if (state.animState !== 'idle') return;
         isCardDragging = true;
         cardStartX = e.clientX;
@@ -1012,48 +1021,49 @@ function renderCards() {
 
     const question = state.playableQuestions[state.currentQuestionIndex];
     const imageBlock = question.image ? `
-        <div class="mb-4 w-full h-40 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
+        <div class="mb-4 w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
             <img src="${question.image}" class="w-full h-full object-contain" alt="Card Image">
         </div>
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
-    // Скролл внутри карточки с помощью card-scroll
-    // Убрал stopPropagation, чтобы клики работали
+    // КАРТОЧКА БЕЗ СКРОЛЛА (fit-content-card)
     return `
     <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full">
             <div class="flex justify-center mb-4 text-xs font-black text-slate-300 dark:text-slate-700">
                 ${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}
             </div>
 
-            <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full max-h-[600px]">
+            <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full max-h-[650px]">
                 <div id="flashcard" class="w-full h-full relative" style="transform: translate(0px, 0px);">
                     <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped ? 'rotate-y-180' : ''}">
                         
                         <div class="absolute inset-0 backface-hidden flex flex-col items-center p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
-                            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
+                            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
                             
-                            <div class="card-content scroll-y-auto flex-1 w-full flex flex-col items-center no-scrollbar">
+                            <div class="fit-content-card w-full flex-1">
                                 ${imageBlock}
-                                <h3 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-snug text-center mb-6">${question.question}</h3>
-                                <div class="w-full space-y-3 mb-4">
+                                <div class="flex-1 flex items-center justify-center">
+                                    <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug text-center mb-4 overflow-hidden text-ellipsis">${question.question}</h3>
+                                </div>
+                                <div class="w-full space-y-1 mb-2">
                                     ${question.options.map((opt, i) => `
-                                        <div class="w-full p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-sm sm:text-base font-medium text-slate-600 dark:text-slate-400 text-left leading-relaxed">
+                                        <div class="w-full p-2 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left truncate">
                                             ${opt}
                                         </div>
                                     `).join('')}
                                 </div>
                             </div>
                             
-                            <div class="mt-2 text-slate-400 text-xs font-bold flex items-center gap-1 opacity-50 shrink-0">
+                            <div class="mt-2 text-slate-400 text-[10px] font-bold flex items-center gap-1 opacity-50 shrink-0">
                                 <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа
                             </div>
                         </div>
 
                         <div class="absolute inset-0 backface-hidden bg-black dark:bg-white p-8 flex flex-col items-center justify-center text-center text-white dark:text-black rounded-[2rem] shadow-2xl rotate-y-180">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
-                            <div class="card-content scroll-y-auto flex-1 w-full flex flex-col items-center justify-center no-scrollbar">
-                                <div class="text-2xl sm:text-3xl font-bold mb-6 text-[#FFD700] dark:text-blue-600 select-none leading-snug">
+                            <div class="flex-1 flex flex-col items-center justify-center w-full overflow-hidden">
+                                <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-blue-600 select-none leading-snug">
                                     ${correctText}
                                 </div>
                             </div>
