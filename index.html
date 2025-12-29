@@ -45,10 +45,10 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER: ИСПРАВЛЕН ОТСТУП (Кнопки не перекрываются) --- */
+        /* --- HEADER: УВЕЛИЧЕННЫЙ ОТСТУП --- */
         .safe-header {
-            /* Добавили 20px к безопасному отступу */
-            padding-top: calc(env(safe-area-inset-top) + 20px); 
+            /* +40px гарантирует, что логотип будет ниже кнопки "Закрыть" */
+            padding-top: calc(env(safe-area-inset-top) + 40px); 
             padding-bottom: 12px;
             padding-left: 16px;
             padding-right: 16px;
@@ -63,7 +63,7 @@
         }
         .dark .safe-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КЛИК ПО КНОПКАМ (Сделал приятным и быстрым) --- */
+        /* --- КЛИК ПО КНОПКАМ --- */
         .btn-click {
             transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.1s;
             cursor: pointer;
@@ -982,14 +982,6 @@ function renderQuiz() {
     return `
     <div class="flex flex-col h-full relative animate-fade-in w-full">
         
-        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'} btn-click">
-            <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
-        </button>
-
-        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90 btn-click">
-            <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
-        </button>
-
         <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 flex-shrink-0">
             <div class="h-full bg-black dark:bg-white transition-all duration-300 ease-out" style="width: ${progressPct}%"></div>
         </div>
@@ -1026,11 +1018,15 @@ function renderQuiz() {
         </div>
 
         <div class="bottom-panel bg-slate-50/80 dark:bg-black/80 border-t border-slate-200 dark:border-slate-800">
-            <div class="max-w-xl mx-auto">
+            <div class="max-w-xl mx-auto flex gap-3 items-stretch">
+                <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="px-5 rounded-2xl font-bold text-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50 btn-click">
+                    <i data-lucide="chevron-left" class="w-6 h-6"></i>
+                </button>
+
                 ${!state.isAnswerChecked ? `
-                    <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] btn-click ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
+                    <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="flex-1 py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] btn-click ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
                 ` : `
-                    <button onclick="nextQuestion()" class="w-full py-4 rounded-2xl font-bold text-lg active:scale-[0.98] btn-click flex items-center justify-center gap-2 ${nextBtnClass}">
+                    <button onclick="nextQuestion()" class="flex-1 py-4 rounded-2xl font-bold text-lg active:scale-[0.98] btn-click flex items-center justify-center gap-2 ${nextBtnClass}">
                         ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'Завершить' : nextBtnText}
                         <i data-lucide="chevron-right" class="w-5 h-5"></i>
                     </button>
@@ -1177,10 +1173,10 @@ function renderCards() {
                             </div>
                         </div>
 
-                        <div class="absolute inset-0 backface-hidden bg-white dark:bg-slate-800 p-8 flex flex-col items-center justify-center text-center text-slate-900 dark:text-white rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-indigo-500/50">
+                        <div class="absolute inset-0 backface-hidden bg-black dark:bg-zinc-800 p-8 flex flex-col items-center justify-center text-center text-white dark:text-white rounded-[2rem] shadow-2xl rotate-y-180">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
                             <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar">
-                                <div class="text-lg sm:text-xl font-bold mb-6 text-indigo-600 dark:text-indigo-400 select-none leading-snug">
+                                <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">
                                     ${correctText}
                                 </div>
                             </div>
