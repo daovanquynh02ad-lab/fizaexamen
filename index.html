@@ -16,19 +16,26 @@
     <script src="questions.js"></script>
 
     <style>
-        /* ГЛОБАЛЬНЫЙ СБРОС */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* --- ГЛОБАЛЬНАЯ ФИКСАЦИЯ (УБИРАЕТ ТРЯСКУ) --- */
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation; /* Убирает задержки и двойные тапы */
+        }
 
         html, body {
-            overscroll-behavior: none;
-            touch-action: pan-y;
-            height: 100dvh;
+            position: fixed; /* Жесткая фиксация */
+            top: 0;
+            left: 0;
             width: 100%;
+            height: 100dvh;
+            overflow: hidden; /* Запрет скролла body */
+            overscroll-behavior: none; /* Запрет "резинки" */
             background-color: #000;
             color: #000;
             font-family: 'Inter', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            overflow: hidden;
         }
 
         #mobile-wrapper {
@@ -45,9 +52,8 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER: УВЕЛИЧЕННЫЙ ОТСТУП --- */
+        /* --- HEADER --- */
         .safe-header {
-            /* +40px гарантирует, что логотип будет ниже кнопки "Закрыть" */
             padding-top: calc(env(safe-area-inset-top) + 40px); 
             padding-bottom: 12px;
             padding-left: 16px;
@@ -63,10 +69,11 @@
         }
         .dark .safe-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КЛИК ПО КНОПКАМ --- */
+        /* --- КЛИК (Быстрый и четкий) --- */
         .btn-click {
-            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.1s;
+            transition: transform 0.05s ease-in-out, opacity 0.05s;
             cursor: pointer;
+            user-select: none;
         }
         .btn-click:active {
             transform: scale(0.96);
@@ -79,40 +86,37 @@
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* --- СКРОЛЛ --- */
+        /* --- СКРОЛЛ КОНТЕНТА --- */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             flex: 1;
             width: 100%;
-            padding-bottom: 220px !important; 
+            padding-bottom: 180px !important; /* Место под панель */
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         /* --- НИЖНЯЯ ПАНЕЛЬ --- */
         .bottom-panel {
-            position: fixed;
+            position: absolute; /* Absolute внутри fixed wrapper лучше чем fixed для iOS */
             bottom: 0;
             left: 0;
-            right: 0;
-            margin: 0 auto;
             width: 100%;
-            max-width: 480px;
             padding: 16px;
             padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
             background-color: inherit;
-            z-index: 9999;
+            z-index: 100;
             border-top: 1px solid rgba(0,0,0,0.05);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
         .dark .bottom-panel { border-top: 1px solid rgba(255,255,255,0.1); }
 
         /* АНИМАЦИИ */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .animate-fade-in { animation: fadeIn 0.25s ease-out; }
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
 
@@ -516,15 +520,66 @@ function toggleShuffle() {
 function toggleTopic(topic) {
     if (state.selectedTopics.includes(topic)) state.selectedTopics = state.selectedTopics.filter(t => t !== topic);
     else state.selectedTopics.push(topic);
-    render();
+    // ФИКС ПРЫЖКОВ СКРОЛЛА
+    // Вместо полного рендера просто обновляем классы кнопок в DOM
+    // Если модалка открыта, обновляем только список тем
+    if (state.showFilterModal) {
+        updateTopicListUI();
+    } else {
+        render();
+    }
 }
 
 function toggleSelectAllTopics() {
     haptic('medium');
     if (state.selectedTopics.length === availableTopics.length) state.selectedTopics = [];
     else state.selectedTopics = [...availableTopics];
-    render();
+    
+    if (state.showFilterModal) {
+        updateTopicListUI();
+        updateSelectAllButtonUI();
+    } else {
+        render();
+    }
 }
+
+// НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ UI СПИСКА ТЕМ БЕЗ ПОЛНОГО РЕРЕНДЕРА
+function updateTopicListUI() {
+    const listContainer = document.getElementById('topics-list');
+    if (!listContainer) return;
+    
+    const buttons = listContainer.querySelectorAll('button[data-topic]');
+    buttons.forEach(btn => {
+        const topic = btn.getAttribute('data-topic');
+        const isSelected = state.selectedTopics.includes(topic);
+        const iconDiv = btn.querySelector('.check-icon-container');
+        
+        if (isSelected) {
+            btn.className = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click bg-black text-white dark:bg-white dark:text-black";
+            if(iconDiv) iconDiv.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>';
+        } else {
+            btn.className = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300";
+            if(iconDiv) iconDiv.innerHTML = '';
+        }
+    });
+    
+    // Обновляем кнопку "Применить"
+    const applyBtn = document.getElementById('apply-filter-btn');
+    if (applyBtn) applyBtn.innerText = `Применить (${state.selectedTopics.length})`;
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function updateSelectAllButtonUI() {
+    const btn = document.getElementById('select-all-btn');
+    const allSelected = state.selectedTopics.length === availableTopics.length;
+    if(!btn) return;
+    
+    btn.innerHTML = `<span>${allSelected ? 'Снять выделение' : 'Выбрать все'}</span>
+                     <i data-lucide="${allSelected ? 'trash-2' : 'layers'}" class="w-4 h-4"></i>`;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
 
 function getFilteredQuestions(viewMode) {
     let base = QUESTIONS_DATA.filter(q => state.selectedTopics.includes(q.topic));
@@ -759,7 +814,7 @@ function renderFilterModal() {
                 </div>
             </div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 scroll-y-auto">
-                <button onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click">
+                <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click">
                     <span>${allSelected ? 'Снять выделение' : 'Выбрать все'}</span>
                     <i data-lucide="${allSelected ? 'trash-2' : 'layers'}" class="w-4 h-4"></i>
                 </button>
@@ -767,17 +822,19 @@ function renderFilterModal() {
                     const isSelected = state.selectedTopics.includes(t);
                     const count = topicCounts[t] || 0;
                     return `
-                        <button onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${isSelected ? 'bg-black text-white dark:bg-white dark:text-black' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}">
+                        <button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${isSelected ? 'bg-black text-white dark:bg-white dark:text-black' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}">
                             <div class="flex items-center min-w-0 flex-1">
                                 <span class="block text-wrap leading-tight pr-2">${t}</span>
                                 <span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${count})</span>
                             </div>
-                            ${isSelected ? '<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>' : ''}
+                            <div class="check-icon-container">
+                                ${isSelected ? '<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>' : ''}
+                            </div>
                         </button>
                     `;
                 }).join('')}
             </div>
-            <button onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">
+            <button id="apply-filter-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">
                 Применить (${state.selectedTopics.length})
             </button>
         </div>
@@ -1028,9 +1085,12 @@ function renderQuiz() {
                 ` : `
                     <button onclick="nextQuestion()" class="flex-1 py-4 rounded-2xl font-bold text-lg active:scale-[0.98] btn-click flex items-center justify-center gap-2 ${nextBtnClass}">
                         ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'Завершить' : nextBtnText}
-                        <i data-lucide="chevron-right" class="w-5 h-5"></i>
                     </button>
                 `}
+                
+                <button onclick="nextQuestion()" ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'disabled' : ''} class="px-5 rounded-2xl font-bold text-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50 btn-click">
+                    <i data-lucide="chevron-right" class="w-6 h-6"></i>
+                </button>
             </div>
         </div>
     </div>`;
@@ -1173,7 +1233,7 @@ function renderCards() {
                             </div>
                         </div>
 
-                        <div class="absolute inset-0 backface-hidden bg-black dark:bg-zinc-800 p-8 flex flex-col items-center justify-center text-center text-white dark:text-white rounded-[2rem] shadow-2xl rotate-y-180">
+                        <div class="absolute inset-0 backface-hidden bg-black dark:bg-slate-800 p-8 flex flex-col items-center justify-center text-center text-white dark:text-white rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-slate-600">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
                             <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar">
                                 <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">
