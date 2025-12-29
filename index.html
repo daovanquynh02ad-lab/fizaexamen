@@ -16,25 +16,17 @@
     <script src="questions.js"></script>
 
     <style>
-        /* ЖЕСТКАЯ ФИКСАЦИЯ ЭКРАНА */
-        html {
+        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
+        html, body {
             overscroll-behavior: none; 
-            touch-action: none; /* Отключаем системные жесты браузера */
-        }
-        
-        body {
+            touch-action: none;
+            height: 100%;
+            width: 100%;
+            background-color: #000;
+            color: #000;
             font-family: 'Inter', sans-serif;
             -webkit-tap-highlight-color: transparent;
-            background-color: #000;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            height: 100vh;
-            width: 100vw;
             overflow: hidden;
-            color: #000;
         }
 
         #mobile-wrapper {
@@ -50,27 +42,51 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* КАРТОЧКИ: 3D и ВМЕСТИМОСТЬ */
+        /* ОТСТУП ПОД СИСТЕМНЫЕ КНОПКИ ТЕЛЕГРАМА */
+        .safe-header-spacing {
+            /* 44px - высота шапки ТГ на iOS + безопасная зона */
+            padding-top: calc(env(safe-area-inset-top) + 46px); 
+            padding-bottom: 8px;
+            padding-left: 16px;
+            padding-right: 16px;
+            width: 100%;
+            z-index: 50;
+            background-color: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        /* 3D КАРТОЧКИ */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* Специальный класс для сжатия текста если не влезает */
-        .fit-content-card {
+        /* КАРТОЧКА БЕЗ СКРОЛЛА - АВТОРАЗМЕР */
+        .card-container-fixed {
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             height: 100%;
             overflow: hidden;
+            padding: 1rem;
+            justify-content: space-between;
+        }
+        
+        /* Классы для динамического размера шрифта */
+        .text-dynamic {
+            /* Базовый размер, будет переопределен JS если текста много */
+            font-size: 1rem; 
+            line-height: 1.3;
         }
 
-        /* СКРОЛЛ ТОЛЬКО ТАМ ГДЕ НУЖНО */
+        /* СКРОЛЛ ТОЛЬКО ДЛЯ СПИСКОВ */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
-            touch-action: pan-y; /* Разрешаем скролл внутри контейнера */
+            touch-action: pan-y;
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -95,7 +111,6 @@
             cursor: pointer;
         }
 
-        /* ЗАГРУЗКА */
         #auth-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 50; background-color: inherit;
@@ -147,7 +162,7 @@
 <script>
 
 // =================================================================
-// 1. НАСТРОЙКИ ТЕЛЕГРАМА (FULLSCREEN + NO SWIPE)
+// 1. СТАРТ
 // =================================================================
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
@@ -159,18 +174,10 @@ let accessError = null;
 const tg = window.Telegram.WebApp;
 
 try { 
-    tg.expand(); // Развернуть
-    tg.requestFullscreen(); // ЗАПРОСИТЬ ПОЛНЫЙ ЭКРАН (Поднять под часы)
-    
-    // САМОЕ ВАЖНОЕ: Блокируем закрытие свайпом
-    if (tg.isVerticalSwipesEnabled !== undefined) {
-        tg.isVerticalSwipesEnabled = false; 
-    }
-    tg.disableVerticalSwipes(); // Дублирующий метод для надежности
-    
-    // Красим подложку
-    tg.setBackgroundColor("#ffffff");
-    tg.setHeaderColor("#ffffff"); 
+    tg.expand(); 
+    tg.requestFullscreen(); 
+    if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
+    tg.setHeaderColor('#ffffff'); 
 } catch(e) {}
 
 async function userClickedStart() {
@@ -203,7 +210,6 @@ async function performAccessCheck() {
     const urlParams = new URLSearchParams(window.location.search);
     const userId = tgUserId || urlParams.get('userId');
 
-    // Локальный режим (file://)
     if (window.location.protocol === 'file:') {
         accessData = { allowed: true }; 
         processQuestions();
@@ -384,18 +390,15 @@ function init() {
 
 function toggleTheme() {
     state.isDark = !state.isDark;
-    const wrapper = document.getElementById('mobile-wrapper');
     const auth = document.getElementById('auth-screen');
     if (state.isDark) {
         document.documentElement.classList.add('dark');
-        wrapper.classList.add('dark');
         auth.style.backgroundColor = '#000';
-        try { tg.setBackgroundColor('#000000'); tg.setHeaderColor('#000000'); } catch(e){}
+        try { tg.setHeaderColor('#000000'); } catch(e){}
     } else {
         document.documentElement.classList.remove('dark');
-        wrapper.classList.remove('dark');
         auth.style.backgroundColor = '#fff';
-        try { tg.setBackgroundColor('#ffffff'); tg.setHeaderColor('#ffffff'); } catch(e){}
+        try { tg.setHeaderColor('#ffffff'); } catch(e){}
     }
     render();
 }
@@ -575,39 +578,37 @@ function render() {
 
 function renderHeader() {
     const isHome = state.view === 'menu';
-    // Добавлен padding-top + min-height для компенсации островка
+    // safe-header-spacing делает отступ от системной шапки ТГ
     return `
-    <div class="w-full bg-slate-50 dark:bg-black flex-shrink-0 relative z-50 flex items-center justify-between shadow-sm transition-colors" style="padding-top: max(10px, env(safe-area-inset-top));">
-        <div class="px-4 py-3 w-full flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                ${!isHome ? `
-                    <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
-                        <i data-lucide="chevron-left" class="w-7 h-7"></i>
-                    </button>
-                ` : ''}
-                <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group">
-                    <div class="transition-transform group-hover:scale-105">
-                        <img src="${state.isDark ? "https://i.ibb.co/tw2sGMTs/image.png" : "https://i.ibb.co/zWn4xWnk/image.png"}"
-                                alt="Imed Logo"
-                                class="w-10 h-10 object-contain rounded-[10px] shadow-sm">
-                    </div>
-                    <span class="font-bold text-2xl text-black dark:text-white tracking-tight flex items-baseline">
-                        <span class="font-serif mr-[1px]">I</span>med
-                    </span>
+    <div class="safe-header-spacing bg-slate-50 dark:bg-black transition-colors shadow-sm">
+        <div class="flex items-center gap-3">
+            ${!isHome ? `
+                <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
+                    <i data-lucide="chevron-left" class="w-7 h-7"></i>
+                </button>
+            ` : ''}
+            <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group">
+                <div class="transition-transform group-hover:scale-105">
+                    <img src="${state.isDark ? "https://i.ibb.co/tw2sGMTs/image.png" : "https://i.ibb.co/zWn4xWnk/image.png"}"
+                            alt="Imed Logo"
+                            class="w-10 h-10 object-contain rounded-[10px] shadow-sm">
                 </div>
+                <span class="font-bold text-2xl text-black dark:text-white tracking-tight flex items-baseline">
+                    <span class="font-serif mr-[1px]">I</span>med
+                </span>
             </div>
-            
-            <div class="flex items-center gap-2">
-                <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors">
-                    <i data-lucide="rotate-cw" class="w-5 h-5"></i>
-                </button>
-                <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors">
-                    <i data-lucide="${state.isDark ? 'sun' : 'moon'}" class="w-6 h-6"></i>
-                </button>
-                <a href="https://t.me/stewonly" target="_blank" class="p-2 text-slate-500 hover:text-[#2AABEE] dark:text-slate-400 dark:hover:text-[#2AABEE] transition-colors">
-                    <i data-lucide="send" class="w-6 h-6"></i>
-                </a>
-            </div>
+        </div>
+        
+        <div class="flex items-center gap-2">
+            <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors">
+                <i data-lucide="rotate-cw" class="w-5 h-5"></i>
+            </button>
+            <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors">
+                <i data-lucide="${state.isDark ? 'sun' : 'moon'}" class="w-6 h-6"></i>
+            </button>
+            <a href="https://t.me/stewonly" target="_blank" class="p-2 text-slate-500 hover:text-[#2AABEE] dark:text-slate-400 dark:hover:text-[#2AABEE] transition-colors">
+                <i data-lucide="send" class="w-6 h-6"></i>
+            </a>
         </div>
     </div>`;
 }
@@ -619,7 +620,7 @@ function renderFilterModal() {
     QUESTIONS_DATA.forEach(q => { topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1; });
 
     return `
-    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full" style="padding-top: env(safe-area-inset-top);" onclick="if(event.target === this) toggleFilterModal(false)">
+    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full safe-header-spacing" onclick="if(event.target === this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col max-h-[85vh] mb-4">
             <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3>
@@ -764,7 +765,7 @@ function renderLearn() {
     const questions = getFilteredQuestions('learn');
     return `
     <div class="flex flex-col h-full w-full">
-        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800" style="padding-top: max(10px, env(safe-area-inset-top));">
+        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 safe-header-spacing">
             <div class="flex items-center gap-3" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
@@ -845,8 +846,8 @@ function renderQuiz() {
     const progressPct = ((state.currentQuestionIndex + 1) / state.playableQuestions.length) * 100;
     
     const imageBlock = question.image ? `
-        <div class="mb-6 rounded-2xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 flex justify-center flex-shrink-0">
-            <img src="${question.image}" class="w-auto h-auto max-h-[25vh] object-contain" alt="Quiz Image">
+        <div class="mb-4 w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700 flex-shrink-0">
+            <img src="${question.image}" class="w-full h-full object-contain" alt="Quiz Image">
         </div>
     ` : '';
 
@@ -863,8 +864,10 @@ function renderQuiz() {
     }
 
     return `
-    <div class="flex flex-col h-full relative animate-fade-in w-full">
-        
+    <div class="flex flex-col h-full relative animate-fade-in w-full safe-header-spacing" style="padding-top: 0 !important;">
+        <div class="safe-header-spacing">
+            </div>
+
         <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
             <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
         </button>
@@ -878,7 +881,7 @@ function renderQuiz() {
         </div>
 
         <div class="scroll-y-auto p-4 px-14 max-w-xl mx-auto w-full">
-            <div class="flex justify-between items-start mb-6 gap-4">
+            <div class="flex justify-between items-start mb-4 gap-4">
                 <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 leading-tight">${question.topic}</span>
                 <span class="text-xs font-black text-slate-300 dark:text-slate-600 whitespace-nowrap mt-1">${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}</span>
             </div>
@@ -906,7 +909,7 @@ function renderQuiz() {
             </div>
         </div>
 
-        <div class="fixed bottom-0 left-0 w-full bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 safe-area-pb z-20 transition-colors absolute-width">
+        <div class="fixed bottom-0 left-0 w-full bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 pb-8 z-20 transition-colors absolute-width">
             <div class="max-w-xl mx-auto">
                 ${!state.isAnswerChecked ? `
                     <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
@@ -946,7 +949,6 @@ function initCardEvents() {
         isCardDragging = false;
         card.releasePointerCapture(e.pointerId);
         
-        // КЛИК В ЛЮБОЕ МЕСТО (< 10px сдвиг) = ПЕРЕВОРОТ
         if (Math.abs(state.swipeX) < 10) {
             card.style.transform = 'translateX(0px) rotate(0deg)';
             toggleFlip();
@@ -1021,32 +1023,41 @@ function renderCards() {
 
     const question = state.playableQuestions[state.currentQuestionIndex];
     const imageBlock = question.image ? `
-        <div class="mb-4 w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
+        <div class="mb-2 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
             <img src="${question.image}" class="w-full h-full object-contain" alt="Card Image">
         </div>
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
-    // КАРТОЧКА БЕЗ СКРОЛЛА (fit-content-card)
+    // АДАПТИВНЫЙ РАЗМЕР ШРИФТА
+    const qLen = question.question.length;
+    let qSizeClass = 'text-xl';
+    if (qLen > 100) qSizeClass = 'text-base';
+    if (qLen > 200) qSizeClass = 'text-sm';
+
+    // КАРТОЧКА БЕЗ СКРОЛЛА (card-container-fixed)
     return `
-    <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full">
-            <div class="flex justify-center mb-4 text-xs font-black text-slate-300 dark:text-slate-700">
+    <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full safe-header-spacing" style="padding-top: 0 !important;">
+            
+            <div class="safe-header-spacing"></div> <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">
                 ${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}
             </div>
 
-            <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full max-h-[650px]">
+            <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full mb-4" style="max-height: calc(100% - 60px);">
                 <div id="flashcard" class="w-full h-full relative" style="transform: translate(0px, 0px);">
                     <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped ? 'rotate-y-180' : ''}">
                         
-                        <div class="absolute inset-0 backface-hidden flex flex-col items-center p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
-                            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
+                        <div class="absolute inset-0 backface-hidden flex flex-col items-center p-3 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
+                            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
                             
-                            <div class="fit-content-card w-full flex-1">
+                            <div class="card-container-fixed w-full">
                                 ${imageBlock}
-                                <div class="flex-1 flex items-center justify-center">
-                                    <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug text-center mb-4 overflow-hidden text-ellipsis">${question.question}</h3>
+                                <div class="flex-1 flex items-center justify-center px-1">
+                                    <h3 class="${qSizeClass} font-bold text-slate-900 dark:text-white leading-snug text-center overflow-hidden text-ellipsis" style="display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical;">
+                                        ${question.question}
+                                    </h3>
                                 </div>
-                                <div class="w-full space-y-1 mb-2">
+                                <div class="w-full space-y-1 mt-2">
                                     ${question.options.map((opt, i) => `
                                         <div class="w-full p-2 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left truncate">
                                             ${opt}
@@ -1055,8 +1066,8 @@ function renderCards() {
                                 </div>
                             </div>
                             
-                            <div class="mt-2 text-slate-400 text-[10px] font-bold flex items-center gap-1 opacity-50 shrink-0">
-                                <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа
+                            <div class="mt-1 text-slate-400 text-[10px] font-bold flex items-center gap-1 opacity-50 shrink-0">
+                                <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми
                             </div>
                         </div>
 
@@ -1073,7 +1084,7 @@ function renderCards() {
                 </div>
             </div>
 
-            <div class="mt-6 flex gap-3 max-w-sm mx-auto w-full transition-opacity">
+            <div class="mt-2 flex gap-3 max-w-sm mx-auto w-full transition-opacity flex-shrink-0" style="margin-bottom: 20px;">
                 <button onclick="animateCard('prev')" class="flex-1 py-4 rounded-2xl font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">Назад</button>
                 <button onclick="animateCard('next')" ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'disabled' : ''} class="flex-[2] py-4 rounded-2xl font-bold transition-all ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed shadow-none' : 'bg-black dark:bg-white text-white dark:text-black shadow-xl shadow-slate-300 dark:shadow-none active:scale-[0.98]'}">Дальше</button>
             </div>
