@@ -33,10 +33,9 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ХЕДЕР: ГАРАНТИРОВАННЫЙ ОТСТУП ОТ КНОПОК ТГ --- */
+        /* --- ХЕДЕР --- */
         .layout-header {
             flex-shrink: 0; width: 100%;
-            /* ДОБАВИЛ + 40px К СИСТЕМНОМУ ОТСТУПУ */
             padding-top: calc(env(safe-area-inset-top) + 40px);
             padding-bottom: 12px;
             padding-left: 16px; padding-right: 16px;
@@ -50,7 +49,7 @@
         .layout-content {
             flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
-            padding-bottom: 140px !important; /* Место под подвал */
+            padding-bottom: 140px !important;
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
@@ -65,14 +64,10 @@
         }
         .dark .layout-footer { border-top: 1px solid rgba(255,255,255,0.1); }
 
-        /* КАРТОЧКИ (FIX IOS) */
+        /* КАРТОЧКИ */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
-        .backface-hidden { 
-            -webkit-backface-visibility: hidden; 
-            backface-visibility: hidden; 
-            transform: translate3d(0,0,0); 
-        }
+        .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translate3d(0,0,0); }
         .rotate-y-180 { transform: rotateY(180deg); }
 
         /* КЛИК */
@@ -85,14 +80,14 @@
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
 
-        /* ЗАГРУЗКА И ОШИБКИ */
+        /* ЭКРАНЫ */
         #intro-layer, #auth-screen, #block-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         #intro-layer { background: #000; }
-        #auth-screen, #block-screen { background-color: inherit; } /* Наследует тему */
+        #auth-screen, #block-screen { background-color: inherit; }
         
         #intro-video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
         #start-text { z-index: 10000; cursor: pointer; position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
@@ -119,15 +114,15 @@
         </div>
     </div>
     
-    <!-- ЗАГРУЗКА (Спиннер) -->
+    <!-- ЗАГРУЗКА -->
     <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
         <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
         <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
 
-    <!-- БЛОКИРОВКА (Доступ закрыт) -->
+    <!-- БЛОКИРОВКА -->
     <div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center">
-        <!-- Контент вставляется JS -->
+        <!-- Контент -->
     </div>
 
     <!-- ПРИЛОЖЕНИЕ -->
@@ -159,7 +154,7 @@ function haptic(type='light') {
     } else if(navigator.vibrate) navigator.vibrate(10);
 }
 
-// Свайп "назад" (Глобальный)
+// Свайп "назад"
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
 document.addEventListener('touchend', (e)=>{if(!window.sw)return;const ex=e.changedTouches[0].clientX;const ey=e.changedTouches[0].clientY;if((ex-window.sx)>60 && Math.abs(ey-window.sy)<50){haptic('medium');goHome();}window.sw=false},{passive:true});
 
@@ -169,7 +164,7 @@ async function userClickedStart() {
     const txt = document.getElementById('start-text'); if(txt) txt.remove();
     const vid=document.getElementById('intro-video');
     
-    // Запускаем проверку доступа ПАРАЛЛЕЛЬНО с видео
+    // Запускаем проверку доступа СРАЗУ
     performAccessCheck();
 
     let played = false;
@@ -185,7 +180,7 @@ async function userClickedStart() {
 
 function finishVideo() { videoFinished = true; checkStateTransition(); }
 
-// --- ПРОВЕРКА ДОСТУПА ---
+// --- ПРОВЕРКА ДОСТУПА (ИСПРАВЛЕНО: СНАЧАЛА СЕТЬ) ---
 async function performAccessCheck() {
     if(typeof physiology_questions==='undefined'){ 
         accessError={type:'file',msg:'Файл questions.js не найден.'};
@@ -195,7 +190,7 @@ async function performAccessCheck() {
     
     const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
     
-    // Локальный тест (для разработки)
+    // Локальный тест
     if(window.location.protocol==='file:'){ accessData={allowed:true};processQuestions();checkStateTransition();return;}
 
     if(!userId){ 
@@ -204,40 +199,50 @@ async function performAccessCheck() {
         return;
     }
     
-    // Кэш
-    const ck = `imed_access_v1_${userId}`; const c = localStorage.getItem(ck);
-    if(c){ 
-        try{
-            const p=JSON.parse(c);
-            if(p.allowed){ accessData=p; processQuestions(); checkStateTransition(); return; }
-        } catch(e){ localStorage.removeItem(ck); } 
-    }
+    const ck = `imed_access_v1_${userId}`;
 
-    // Запрос к Google Script
-    try{
-        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
+    // 1. Сначала пробуем СЕРВЕР (чтобы поймать удаление ID)
+    try {
+        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000); // 15 сек таймаут
         const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`,{signal:ctrl.signal});
         const data=await res.json();
         
         if(data.allowed){ 
+            // ДОСТУП ЕСТЬ
             accessData=data; 
             localStorage.setItem(ck,JSON.stringify(data)); 
             processQuestions(); 
         } else {
-            // ДОСТУП ЗАПРЕЩЕН
-            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
+            // ДОСТУП ЗАКРЫТ (ID удален)
+            localStorage.removeItem(ck); // Удаляем кэш
+            accessError={type:'denied', msg:'Доступ к приложению ограничен. Пожалуйста, обратитесь к администратору для восстановления.'};
         }
-    } catch(e){ 
-        accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
+    } catch(e) { 
+        // 2. Если СЕТЬ УПАЛА, только тогда смотрим КЭШ
+        console.log("Network error, checking cache...");
+        const c = localStorage.getItem(ck);
+        if(c){ 
+            try{
+                const p=JSON.parse(c);
+                if(p.allowed){ 
+                    accessData=p; 
+                    processQuestions(); 
+                }
+            } catch(err){ localStorage.removeItem(ck); } 
+        }
+        
+        // Если и в кэше пусто - ошибка сети
+        if (!accessData) {
+            accessError={type:'network', msg:'Не удалось подключиться к серверу. Проверьте интернет.'}; 
+        }
     }
+    
     checkStateTransition();
 }
 
-// --- УПРАВЛЕНИЕ ЭКРАНАМИ (ИНТРО -> ЗАГРУЗКА -> ПРИЛОЖЕНИЕ/ОШИБКА) ---
+// --- УПРАВЛЕНИЕ ЭКРАНАМИ ---
 function checkStateTransition() {
-    // Ждем окончания видео (или клика, если видео не пошло)
-    // НО если уже есть ошибка (нет инета), можем показать её сразу, не дожидаясь видео?
-    // Для красоты лучше дождаться конца видео.
+    // Ждем окончания видео (если нет критической ошибки)
     if(!videoFinished && !accessError) return; 
     
     const intro=document.getElementById('intro-layer');
@@ -252,11 +257,11 @@ function checkStateTransition() {
         return;
     }
 
-    // Если есть ошибка (доступ закрыт или сеть)
+    // Если ОШИБКА (Доступ закрыт или Сеть)
     if(accessError){ 
         if(intro) intro.style.display='none'; 
-        auth.classList.add('hidden-force'); // Скрываем спиннер
-        block.classList.remove('hidden-force'); // Показываем блок
+        auth.classList.add('hidden-force');
+        block.classList.remove('hidden-force');
         
         let icon = 'alert-triangle';
         let title = 'Ошибка';
@@ -272,23 +277,24 @@ function checkStateTransition() {
         }
 
         block.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full animate-fade-in">
-                <div class="${bgClass} p-5 rounded-full mb-6">
-                    <i data-lucide="${icon}" class="w-12 h-12 ${colorClass}"></i>
+            <div class="flex flex-col items-center justify-center h-full animate-fade-in px-4">
+                <div class="${bgClass} p-6 rounded-full mb-6">
+                    <i data-lucide="${icon}" class="w-16 h-16 ${colorClass}"></i>
                 </div>
-                <h1 class="text-2xl font-black text-slate-900 dark:text-white mb-3">${title}</h1>
-                <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-xs font-medium leading-relaxed">
+                <h1 class="text-3xl font-black text-slate-900 dark:text-white mb-4">${title}</h1>
+                <p class="text-slate-500 dark:text-slate-400 mb-10 max-w-sm font-medium leading-relaxed">
                     ${accessError.msg}
                 </p>
                 ${accessError.type === 'denied' ? 
-                `<a href="https://t.me/stewonly" class="bg-black dark:bg-white text-white dark:text-black px-8 py-4 rounded-2xl font-bold text-sm shadow-lg btn-click">Связаться с админом</a>` : ''}
+                `<a href="https://t.me/stewonly" class="w-full max-w-xs bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold text-center shadow-lg btn-click transition-transform active:scale-95">Связаться с админом</a>` : 
+                `<button onclick="window.location.reload()" class="w-full max-w-xs bg-slate-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Попробовать снова</button>`}
             </div>
         `;
         lucide.createIcons();
         return; 
     }
 
-    // Успех -> Вход в приложение
+    // УСПЕХ
     if(accessData){
         if(intro){ 
             intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; 
@@ -481,7 +487,6 @@ function render() {
     lucide.createIcons();
 }
 
-// ХЕДЕР - УВЕЛИЧЕННЫЙ ОТСТУП СВЕРХУ, ЛОГО СЛЕВА, КНОПКИ СПРАВА
 function renderHeader() {
     const isHome=state.view==='menu';
     return `<div class="layout-header bg-slate-50 dark:bg-black shadow-sm">
@@ -500,7 +505,6 @@ function renderHeader() {
     </div>`;
 }
 
-// МЕНЮ - СДЕЛАНО КОМПАКТНЕЕ
 function renderMenuContent() {
     const learned=Object.values(state.userProgress).filter(p=>p.status==='correct').length;
     const errors=Object.values(state.userProgress).filter(p=>p.status==='wrong').length;
@@ -606,7 +610,6 @@ function renderCardsContent() {
         <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full mb-4">
             <div id="flashcard" class="w-full h-full relative" onclick="handleCardClick()">
                 <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped?'rotate-y-180':''}">
-                    <!-- FRONT -->
                     <div class="absolute inset-0 backface-hidden flex flex-col p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800 items-start overflow-hidden">
                          <div class="w-full flex justify-center mb-2"><div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${q.topic}</div></div>
                          <div class="w-full flex flex-col gap-4 flex-1 overflow-y-auto no-scrollbar justify-start">
@@ -616,7 +619,6 @@ function renderCardsContent() {
                          </div>
                          <div class="mt-auto w-full text-center pt-2"><span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа</span></div>
                     </div>
-                    <!-- BACK -->
                     <div class="absolute inset-0 backface-hidden bg-black dark:bg-slate-800 p-8 flex flex-col items-center justify-center text-center rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-slate-600">
                         <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white">Правильный ответ</h3>
                         <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar"><div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">${correctText}</div></div>
