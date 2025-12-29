@@ -22,7 +22,7 @@
         html, body {
             overscroll-behavior: none;
             touch-action: pan-y;
-            height: 100dvh;
+            height: 100dvh; /* Важно для мобилок */
             width: 100%;
             background-color: #000;
             color: #000;
@@ -68,26 +68,33 @@
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* СКРОЛЛ */
+        /* СКРОЛЛ - ИСПРАВЛЕНО */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             flex: 1;
-            padding-bottom: 20px;
+            width: 100%;
+            /* !ВАЖНО: Большой отступ снизу, чтобы текст не залезал под кнопку */
+            padding-bottom: 140px; 
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* НИЖНЯЯ ПАНЕЛЬ */
+        /* НИЖНЯЯ ПАНЕЛЬ - ИСПРАВЛЕНО (ФИКСАЦИЯ) */
         .bottom-panel {
+            position: absolute; /* Прибиваем намертво к низу */
+            bottom: 0;
+            left: 0;
+            width: 100%;
             padding: 16px;
             padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
             background-color: inherit;
-            z-index: 40;
-            flex-shrink: 0;
-            width: 100%;
+            z-index: 100; /* Поверх текста */
             border-top: 1px solid rgba(0,0,0,0.05);
+            /* Размытие фона под кнопкой */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
         .dark .bottom-panel { border-top: 1px solid rgba(255,255,255,0.1); }
 
@@ -118,9 +125,10 @@
         }
         .hidden-force { display: none !important; }
         
-        #app { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+        /* App container relative для позиционирования панели */
+        #app { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; position: relative; }
     </style>
-   
+    
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -138,7 +146,7 @@
 <div id="mobile-wrapper" class="bg-slate-50 dark:bg-black">
 
     <div id="intro-layer">
-        <video id="intro-video" playsinline preload="auto">
+        <video id="intro-video" playsinline preload="auto" muted>
             <source src="intro.mp4" type="video/mp4">
         </video>
         <div id="start-screen-btn" onclick="userClickedStart()">
@@ -152,7 +160,7 @@
         <div class="animate-spin text-indigo-600 mb-4">
             <i data-lucide="loader-2" class="w-10 h-10"></i>
         </div>
-        <p class="text-slate-500 font-medium">Загрузка...</p>
+        <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
 
     <div id="app" class="hidden-force"></div>
@@ -162,25 +170,25 @@
 <script>
 
 // =================================================================
-// 1. СТАРТ, ЖЕСТЫ И ВИБРАЦИЯ
+// 1. СТАРТ И ЖЕСТЫ
 // =================================================================
 
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
 
-let accessData = null;      
-let videoFinished = false;  
-let accessError = null;     
+let accessData = null;
+let videoFinished = false;
+let accessError = null;
 
 const tg = window.Telegram.WebApp;
 
-try { 
-    tg.expand(); 
-    tg.requestFullscreen(); 
-    if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
-    tg.setHeaderColor('#ffffff'); 
+try {
+    tg.expand();
+    // tg.requestFullscreen(); // Убрал, т.к. иногда вызывает сбои
+    if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false;
+    tg.setHeaderColor('#ffffff');
 } catch(e) {}
 
-// === ВИБРАЦИЯ (НОВОЕ) ===
+// === ВИБРАЦИЯ ===
 function haptic(type = 'light') {
     if (tg.HapticFeedback) {
         if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
@@ -204,15 +212,13 @@ document.addEventListener('touchstart', (e) => {
 
 document.addEventListener('touchend', (e) => {
     if (!window.isSwipingBack) return;
-    
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;
-    
     const diffX = endX - window.swipeBackStartX;
     const diffY = Math.abs(endY - window.swipeBackStartY);
 
     if (diffX > 60 && diffY < 50) {
-        haptic('medium'); // Вибрация при выходе
+        haptic('medium');
         goHome();
     }
     window.isSwipingBack = false;
@@ -220,13 +226,14 @@ document.addEventListener('touchend', (e) => {
 
 
 async function userClickedStart() {
-    haptic('medium'); // Вибрация при старте
+    haptic('medium');
     const btn = document.getElementById('start-screen-btn');
     const vid = document.getElementById('intro-video');
     btn.style.opacity = '0';
     setTimeout(() => btn.remove(), 300);
 
     try {
+        vid.muted = false; // Важно для автоплея
         await vid.play();
         vid.onended = function() {
             videoFinished = true;
@@ -250,8 +257,9 @@ async function performAccessCheck() {
     const urlParams = new URLSearchParams(window.location.search);
     const userId = tgUserId || urlParams.get('userId');
 
+    // Локальный тест
     if (window.location.protocol === 'file:') {
-        accessData = { allowed: true }; 
+        accessData = { allowed: true };
         processQuestions();
         checkStateTransition();
         return;
@@ -263,15 +271,32 @@ async function performAccessCheck() {
         return;
     }
 
+    // === КЭШИРОВАНИЕ (ЗАЩИТА ОТ ПАДЕНИЯ) ===
+    const CACHE_KEY = `imed_access_v1_${userId}`;
+    const cachedAccess = localStorage.getItem(CACHE_KEY);
+    
+    if (cachedAccess) {
+        try {
+            const parsed = JSON.parse(cachedAccess);
+            if (parsed.allowed) {
+                accessData = parsed;
+                processQuestions();
+                checkStateTransition();
+                return; // Не дергаем сервер
+            }
+        } catch(e) { localStorage.removeItem(CACHE_KEY); }
+    }
+
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 сек таймаут
         const response = await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`, { signal: controller.signal });
         clearTimeout(timeoutId);
         const data = await response.json();
         
         if (data.allowed) {
-            accessData = data; 
+            accessData = data;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data)); // Сохраняем в память
             processQuestions();
         } else {
             accessError = { type: 'denied', msg: 'Доступ закрыт.' };
@@ -290,23 +315,29 @@ function checkStateTransition() {
     const app = document.getElementById('app');
 
     if (accessError) {
-        intro.style.display = 'none';
+        if(intro) intro.style.display = 'none';
         auth.classList.remove('hidden-force');
         renderBlockScreen(accessError.type === 'denied' ? 'Доступ закрыт' : 'Ошибка', accessError.msg);
         return;
     }
 
     if (accessData) {
-        intro.style.transition = 'opacity 0.5s ease';
-        intro.style.opacity = '0';
-        setTimeout(() => {
-            intro.style.display = 'none'; 
+        if(intro) {
+            intro.style.transition = 'opacity 0.5s ease';
+            intro.style.opacity = '0';
+            setTimeout(() => {
+                intro.style.display = 'none';
+                auth.classList.add('hidden-force');
+                app.classList.remove('hidden-force');
+                init();
+            }, 500);
+        } else {
             auth.classList.add('hidden-force');
             app.classList.remove('hidden-force');
-            init(); 
-        }, 500);
+            init();
+        }
     } else {
-        intro.style.display = 'none';
+        if(intro) intro.style.display = 'none';
         auth.classList.remove('hidden-force');
     }
 }
@@ -320,9 +351,9 @@ const TOPIC_MAP = [
     { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" },                 
     { pages: 5,  title: "3. Физиология клетки и тканей" },             
     { pages: 15, title: "4. Анатомия опорно-двигательного аппарата" },              
-    { pages: 2,  title: "5. Анатомия дыхательной системы" },      
+    { pages: 2,  title: "5. Анатомия дыхательной системы" },       
     { pages: 7,  title: "6. Анатомия желудочно-кишечного тракта" },              
-    { pages: 2,  title: "7. Анатомия выделительной системы" },    
+    { pages: 2,  title: "7. Анатомия выделительной системы" },     
     { pages: 4,  title: "8. Анатомия сердечно-сосудистой системы" },              
     { pages: 22, title: "9. Физиология крови: форменные элементы" },  
     { pages: 15, title: "10. Буферные системы крови и группы крови" }, 
@@ -331,46 +362,56 @@ const TOPIC_MAP = [
     { pages: 13, title: "13. Гемодинамика и микроциркуляция" },             
     { pages: 4,  title: "14. Регуляция кровообращения" }, 
     { pages: 19, title: "15. Функции почек и мочеобразование" },            
-    { pages: 9,  title: "16. Регуляция функции почек" },          
+    { pages: 9,  title: "16. Регуляция функции почек" },           
     { pages: 11, title: "17. Пищеварение в полости рта и желудке" },
     { pages: 14, title: "18. Пищеварение в кишечнике, роль поджелудочной и печени" },   
-    { pages: 16, title: "19. Регуляция пищеварения и всасывание" },    
-    { pages: 7,  title: "20. Обмен веществ и питание" },            
+    { pages: 16, title: "19. Регуляция пищеварения и всасывание" },     
+    { pages: 7,  title: "20. Обмен веществ и питание" },             
     { pages: 10, title: "21. Обмен энергии и термометрия" },            
-    { pages: 9,  title: "22. Терморегуляция" },           
-    { pages: 18, title: "23. Физиология дыхания: вентиляция легких" },      
+    { pages: 9,  title: "22. Терморегуляция" },            
+    { pages: 18, title: "23. Физиология дыхания: вентиляция легких" },       
     { pages: 7,  title: "24. Газообмен в легких и тканях" },                
-    { pages: 8,  title: "25. Транспорт газов кровью (Гемоглобин)" },               
+    { pages: 8,  title: "25. Транспорт газов кровью (Гемоглобин)" },                
     { pages: 8,  title: "26. Регуляция дыхания" },        
-    { pages: 7,  title: "27. Общая физиология эндокринной системы" },     
-    { pages: 12, title: "28. Частная физиология эндокринных желез" },   
+    { pages: 7,  title: "27. Общая физиология эндокринной системы" },      
+    { pages: 12, title: "28. Частная физиология эндокринных желез" },    
     { pages: 19, title: "29. Физиология возбудимых тканей" },             
     { pages: 10, title: "30. Нервные волокна и синаптическая передача" },            
-    { pages: 10, title: "31. Физиология мышц и мышечного сокращения" },          
-    { pages: 10, title: "32. ЦНС: Нейроны и нервные центры" },     
+    { pages: 10, title: "31. Физиология мышц и мышечного сокращения" },           
+    { pages: 10, title: "32. ЦНС: Нейроны и нервные центры" },      
     { pages: 11, title: "33. ЦНС: Рефлекторная деятельность и торможение" }, 
-    { pages: 18, title: "34. Частная физиология ЦНС (Спинной и головной мозг)" },   
-    { pages: 18, title: "35. Вегетативная нервная система (ВНС)" },                      
+    { pages: 18, title: "34. Частная физиология ЦНС (Спинной и головной мозг)" },    
+    { pages: 18, title: "35. Вегетативная нервная система (ВНС)" },                       
     { pages: 11, title: "36. Сенсорные системы: общие принципы" },  
-    { pages: 4,  title: "37. Обонятельная и вкусовая сенсорные системы" },           
-    { pages: 4,  title: "38. Соматосенсорная система и физиология боли" },                     
+    { pages: 4,  title: "37. Обонятельная и вкусовая сенсорные системы" },            
+    { pages: 4,  title: "38. Соматосенсорная система и физиология боли" },                  
     { pages: 14, title: "39. Зрительная сенсорная система" },                   
     { pages: 6,  title: "40. Слуховая и вестибулярная системы" },        
-    { pages: 6,  title: "41. ВНД: Условные и безусловные рефлексы" },    
-    { pages: 16, title: "42. ВНД: Типы, память, сон, эмоции" },    
-    { pages: 17, title: "43. Адаптация и экологическая физиология" },    
+    { pages: 6,  title: "41. ВНД: Условные и безусловные рефлексы" },     
+    { pages: 16, title: "42. ВНД: Типы, память, сон, эмоции" },     
+    { pages: 17, title: "43. Адаптация и экологическая физиология" },     
     { pages: 52, title: "44. Возрастная физиология" }     
 ];
 
 let QUESTIONS_DATA = [];
 let availableTopics = [];
 
+// Функция защиты от поломки HTML (XSS)
+function escapeHtml(text) {
+    if (!text) return "";
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function processQuestions() {
     if (typeof physiology_questions === 'undefined') return false;
     const totalBookPages = TOPIC_MAP.reduce((sum, t) => sum + t.pages, 0);
     const questionsPerPage = physiology_questions.length / totalBookPages;
     let accumulatedQuestions = 0;
-    
     const TOPIC_RANGES = TOPIC_MAP.map(t => {
         const count = Math.round(t.pages * questionsPerPage);
         const start = accumulatedQuestions;
@@ -382,41 +423,45 @@ function processQuestions() {
 
     QUESTIONS_DATA = physiology_questions.map((q, index) => {
         const currentTopic = TOPIC_RANGES.find(r => index >= r.start && index < r.end) || TOPIC_RANGES[TOPIC_RANGES.length-1];
-        const cleanOptions = q.options.map(opt => opt.replace(/^\d+\)\s*/, ''));
-        const correctIndices = String(q.answer).split(',').map(s => parseInt(s.trim()) - 1).filter(n => !isNaN(n));
+        const cleanOptions = (q.options || []).map(opt => escapeHtml(opt.replace(/^\d+\)\s*/, '')));
+        
+        let correctIndices = [];
+        if (q.answer) {
+             correctIndices = String(q.answer).split(',').map(s => parseInt(s.trim()) - 1).filter(n => !isNaN(n));
+        }
+
         return { 
             id: q.id, 
             topic: currentTopic ? currentTopic.title : "Общее", 
-            question: q.question, 
+            question: escapeHtml(q.question), 
             options: cleanOptions, 
             correctIndices: correctIndices, 
             image: q.image 
         };
     });
     availableTopics = [...new Set(QUESTIONS_DATA.map(q => q.topic))];
-    state.selectedTopics = [...availableTopics]; 
+    state.selectedTopics = [...availableTopics];
     return true;
 }
 
 // =================================================================
 // 3. STATE & LOGIC
 // =================================================================
-        
 const state = {
-    view: 'menu', 
+    view: 'menu',
     isDark: false,
     showFilterModal: false,
     selectedTopics: [],
-    userProgress: {}, 
+    userProgress: {},
     resumeState: null,
     playableQuestions: [],
     currentQuestionIndex: 0,
     quizFinished: false,
-    sessionAnswers: {}, 
-    selectedOptions: [], 
+    sessionAnswers: {},
+    selectedOptions: [],
     isAnswerChecked: false,
     lastResult: false,
-    isShuffleEnabled: false, 
+    isShuffleEnabled: false,
     comboStreak: 0,
     hideAnswersInLearn: false,
     isFlipped: false,
@@ -429,42 +474,42 @@ function init() {
 }
 
 function toggleTheme() {
-    haptic('light'); // Вибрация
+    haptic('light');
     state.isDark = !state.isDark;
     const auth = document.getElementById('auth-screen');
     if (state.isDark) {
         document.documentElement.classList.add('dark');
-        auth.style.backgroundColor = '#000';
+        if(auth) auth.style.backgroundColor = '#000';
         try { tg.setHeaderColor('#000000'); } catch(e){}
     } else {
         document.documentElement.classList.remove('dark');
-        auth.style.backgroundColor = '#fff';
+        if(auth) auth.style.backgroundColor = '#fff';
         try { tg.setHeaderColor('#ffffff'); } catch(e){}
     }
     render();
 }
 
 function toggleFilterModal(show) {
-    if(show) haptic('light'); // Вибрация
+    if(show) haptic('light');
     state.showFilterModal = show;
     render();
 }
 
 function toggleShuffle() {
-    haptic('light'); // Вибрация
+    haptic('light');
     state.isShuffleEnabled = !state.isShuffleEnabled;
     render();
 }
 
 function toggleTopic(topic) {
-    haptic('light'); // Вибрация
+    haptic('light');
     if (state.selectedTopics.includes(topic)) state.selectedTopics = state.selectedTopics.filter(t => t !== topic);
     else state.selectedTopics.push(topic);
     render();
 }
 
 function toggleSelectAllTopics() {
-    haptic('medium'); // Вибрация
+    haptic('medium');
     if (state.selectedTopics.length === availableTopics.length) state.selectedTopics = [];
     else state.selectedTopics = [...availableTopics];
     render();
@@ -477,7 +522,11 @@ function getFilteredQuestions(viewMode) {
 }
 
 function startMode(mode, isResume = false) {
-    haptic('medium'); // Вибрация
+    haptic('medium');
+    // СБРОС СКРОЛЛА ПРИ ВХОДЕ В НОВЫЙ РЕЖИМ
+    const scrollContainer = document.querySelector('.scroll-y-auto');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+
     if (isResume && state.resumeState && state.resumeState.mode === mode) {
         state.view = mode;
         render();
@@ -503,7 +552,7 @@ function startMode(mode, isResume = false) {
 }
 
 function resetQuestionState() {
-    state.selectedOptions = []; 
+    state.selectedOptions = [];
     state.isAnswerChecked = false;
     state.lastResult = false;
     state.isFlipped = false;
@@ -532,15 +581,14 @@ function loadStateForIndex(index) {
 
 function handleOptionSelect(idx) {
     if (state.isAnswerChecked) return;
-    haptic('light'); // Вибрация
+    haptic('light');
     if (state.selectedOptions.includes(idx)) state.selectedOptions = state.selectedOptions.filter(i => i !== idx);
     else state.selectedOptions.push(idx);
     render();
 }
 
 function checkAnswer() {
-    if (state.selectedOptions.length === 0) return; 
-    
+    if (state.selectedOptions.length === 0) return;
     state.isAnswerChecked = true;
     const currentQ = state.playableQuestions[state.currentQuestionIndex];
     const selectedSorted = [...state.selectedOptions].sort((a,b) => a-b).toString();
@@ -548,12 +596,10 @@ function checkAnswer() {
     const isCorrect = selectedSorted === correctSorted;
     state.lastResult = isCorrect;
     
-    // Вибрация в зависимости от ответа
     haptic(isCorrect ? 'success' : 'error');
 
     if (isCorrect) state.comboStreak++;
     else state.comboStreak = 0;
-    
     state.userProgress[currentQ.id] = {
         status: isCorrect ? 'correct' : 'wrong',
         attempts: (state.userProgress[currentQ.id]?.attempts || 0) + 1
@@ -563,11 +609,14 @@ function checkAnswer() {
 }
 
 function nextQuestion() {
-    haptic('light'); // Вибрация
+    haptic('light');
     saveCurrentState();
     if (state.currentQuestionIndex < state.playableQuestions.length - 1) {
         state.currentQuestionIndex++;
         loadStateForIndex(state.currentQuestionIndex);
+        // Сброс скролла вверх при переходе к следующему вопросу
+        const scrollContainer = document.querySelector('.scroll-y-auto');
+        if (scrollContainer) scrollContainer.scrollTop = 0;
     } else {
         state.quizFinished = true;
     }
@@ -575,7 +624,7 @@ function nextQuestion() {
 }
 
 function prevQuestion() {
-    haptic('light'); // Вибрация
+    haptic('light');
     saveCurrentState();
     if (state.currentQuestionIndex > 0) {
         state.currentQuestionIndex--;
@@ -585,7 +634,7 @@ function prevQuestion() {
 }
 
 function goHome() {
-    haptic('medium'); // Вибрация
+    haptic('medium');
     if (['quiz', 'cards', 'mistakes'].includes(state.view)) {
         if (!state.quizFinished && state.playableQuestions.length > 0) {
             state.resumeState = {
@@ -605,16 +654,20 @@ function goHome() {
 // 4. RENDERERS
 // =================================================================
 
+let lastView = 'menu';
+
 function render() {
     const app = document.getElementById('app');
     
-    // СОХРАНЕНИЕ СКРОЛЛА
+    // СОХРАНЕНИЕ СКРОЛЛА (Исправлено)
     let savedScroll = 0;
     const scrollContainer = document.querySelector('.scroll-y-auto');
-    if (scrollContainer) savedScroll = scrollContainer.scrollTop;
+    // Сохраняем скролл только если вид не менялся
+    if (scrollContainer && state.view === lastView) savedScroll = scrollContainer.scrollTop;
+    
+    lastView = state.view;
 
     app.innerHTML = renderHeader();
-    
     let contentHtml = '';
     if (state.view === 'menu') contentHtml = renderMenu();
     else if (state.view === 'learn') contentHtml = renderLearn();
@@ -624,7 +677,6 @@ function render() {
     app.innerHTML += contentHtml;
 
     if (state.showFilterModal) app.innerHTML += renderFilterModal();
-    
     if (state.view === 'cards') setTimeout(initCardEvents, 0);
 
     // ВОССТАНОВЛЕНИЕ СКРОЛЛА
@@ -632,7 +684,6 @@ function render() {
     if(newScrollContainer && savedScroll > 0) {
         newScrollContainer.scrollTop = savedScroll;
     }
-    
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
@@ -641,7 +692,7 @@ function renderHeader() {
     return `
     <div class="safe-header bg-slate-50 dark:bg-black transition-colors shadow-sm">
         <div class="flex items-center gap-3">
-            ${!isHome && !tg.initData ? `
+            ${!isHome ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
                 </button>
@@ -947,7 +998,7 @@ function renderQuiz() {
 
             <h3 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${question.question}</h3>
 
-            <div class="space-y-3 pb-32">
+            <div class="space-y-3">
                 ${question.options.map((opt, idx) => {
                     let btnStyle = "w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative ";
                     if (!state.isAnswerChecked) {
@@ -966,7 +1017,7 @@ function renderQuiz() {
             </div>
         </div>
 
-        <div class="bottom-panel bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
+        <div class="bottom-panel bg-slate-50/80 dark:bg-black/80 border-t border-slate-200 dark:border-slate-800">
             <div class="max-w-xl mx-auto">
                 ${!state.isAnswerChecked ? `
                     <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
@@ -984,7 +1035,6 @@ function renderQuiz() {
 function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
-    
     card.addEventListener('pointerdown', (e) => {
         if (state.animState !== 'idle') return;
         isCardDragging = true;
@@ -993,19 +1043,16 @@ function initCardEvents() {
         card.style.transition = 'none';
         card.setPointerCapture(e.pointerId);
     });
-    
     card.addEventListener('pointermove', (e) => {
         if (!isCardDragging) return;
         state.swipeX = e.clientX - cardStartX;
         const rotation = state.swipeX * 0.05;
         card.style.transform = `translateX(${state.swipeX}px) rotate(${rotation}deg)`;
     });
-    
     card.addEventListener('pointerup', (e) => {
         if (!isCardDragging) return;
         isCardDragging = false;
         card.releasePointerCapture(e.pointerId);
-        
         if (Math.abs(state.swipeX) < 10) {
             card.style.transform = 'translateX(0px) rotate(0deg)';
             toggleFlip();
@@ -1041,7 +1088,6 @@ function animateCard(direction) {
             return;
     }
     
-    haptic('medium'); // Вибрация при свайпе
     card.style.transition = 'transform 0.2s ease-in, opacity 0.2s ease-in';
     card.style.transform = direction === 'next' ? 'translateX(-120vw) rotate(-20deg)' : 'translateX(120vw) rotate(20deg)';
     card.style.opacity = '0';
@@ -1065,7 +1111,6 @@ function animateCard(direction) {
 }
 
 function toggleFlip() {
-    haptic('light'); // Вибрация при перевороте
     state.isFlipped = !state.isFlipped;
     const inner = document.getElementById('card-inner');
     if (state.isFlipped) inner.classList.add('rotate-y-180');
@@ -1083,16 +1128,15 @@ function renderCards() {
 
     const question = state.playableQuestions[state.currentQuestionIndex];
     const imageBlock = question.image ? `
-        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700 flex-shrink-0">
+        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
             <img src="${question.image}" class="w-full h-full object-contain" alt="Card Image">
         </div>
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
-    // КАРТОЧКА: КОНТЕНТ СВЕРХУ (justify-start)
+    // КАРТОЧКА
     return `
     <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full">
-            
             <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">
                 ${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}
             </div>
