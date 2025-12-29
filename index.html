@@ -45,9 +45,8 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER: ОПУСТИЛ ЕЩЕ НИЖЕ (ФИКС "5 ММ") --- */
+        /* --- HEADER: ОТСТУП СОХРАНЕН --- */
         .safe-header {
-            /* Было 44px, поставил 70px. Это опустит шапку ниже кнопок "Закрыть/Меню" */
             padding-top: calc(env(safe-area-inset-top) + 70px); 
             padding-bottom: 12px;
             padding-left: 16px;
@@ -69,34 +68,35 @@
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* --- СКРОЛЛ: БОЛЬШОЙ ОТСТУП СНИЗУ --- */
+        /* --- СКРОЛЛ: ОТСТУП СОХРАНЕН --- */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             flex: 1;
             width: 100%;
-            /* 220px отступа, чтобы текст вылезал из-под кнопки даже на маленьких экранах */
             padding-bottom: 220px !important; 
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* --- НИЖНЯЯ ПАНЕЛЬ: ФИКСИРОВАННАЯ --- */
+        /* --- НИЖНЯЯ ПАНЕЛЬ: ИСПРАВЛЕНИЕ ПОЗИЦИОНИРОВАНИЯ --- */
         .bottom-panel {
-            position: fixed; /* Приклеена к экрану */
+            position: fixed;
             bottom: 0;
+            
+            /* ИСПРАВЛЕНО: Вместо transform используем margin auto + left/right 0 */
             left: 0;
+            right: 0;
+            margin: 0 auto;
+            
             width: 100%;
-            max-width: 480px; /* Чтобы на компе не разъезжалась */
-            /* Центрируем на десктопе, если ширина больше 480 */
-            left: 50%;
-            transform: translateX(-50%);
+            max-width: 480px;
             
             padding: 16px;
             padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
             background-color: inherit;
-            z-index: 9999; /* Поверх всего */
+            z-index: 9999;
             border-top: 1px solid rgba(0,0,0,0.05);
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
