@@ -16,30 +16,29 @@
     <script src="questions.js"></script>
 
     <style>
-        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
+        /* УБИРАЕМ ВСЕ ОТСТУПЫ БРАУЗЕРА */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         html, body {
-            overscroll-behavior: none; /* Блокируем резинку */
+            overscroll-behavior: none; 
             touch-action: pan-x pan-y;
+            height: 100%;
+            width: 100%;
+            background-color: #000;
+            color: #000;
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
         }
         
         body {
-            font-family: 'Inter', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            background-color: #000;
-            margin: 0;
-            padding: 0;
             display: flex;
             justify-content: center;
-            align-items: flex-start; /* Прижимаем к верху */
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            color: #000;
+            align-items: flex-start; /* Прижимаем к самому верху */
         }
 
         #mobile-wrapper {
             width: 100%;
-            max-width: 480px;
+            max-width: 480px; /* Ограничитель только для ПК */
             height: 100%;
             background-color: #fff;
             position: relative;
@@ -48,14 +47,36 @@
             flex-direction: column;
             box-shadow: 0 0 50px rgba(0,0,0,0.5);
         }
-        @media (max-width: 480px) { #mobile-wrapper { max-width: 100%; box-shadow: none; } }
+        
+        @media (max-width: 480px) {
+            #mobile-wrapper { max-width: 100%; box-shadow: none; }
+        }
+
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* КАРТОЧКИ И 3D */
+        /* СПЕЦИАЛЬНЫЙ ОТСТУП ТОЛЬКО ДЛЯ ШАПКИ */
+        /* На айфоне это будет высота челки, на ПК - 0 или минимальный отступ */
+        .safe-header {
+            padding-top: env(safe-area-inset-top); 
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-bottom: 0.75rem;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 50;
+        }
+
+        /* 3D КАРТОЧКИ */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
+
+        /* Для карточки важно отключить стандартные жесты браузера внутри неё */
+        #flashcard { touch-action: none; }
 
         /* СКРОЛЛ */
         .scroll-container {
@@ -63,27 +84,12 @@
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             flex: 1;
+            width: 100%;
             position: relative;
             padding-bottom: 40px;
         }
-        /* Скролл внутри карточки */
-        .card-scroll {
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            flex: 1;
-            width: 100%;
-            min-height: 0; /* Важно для flex-контейнера */
-        }
-
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* ШАПКА - МИНИМАЛЬНАЯ ВЫСОТА */
-        .header-compact { 
-            padding-top: env(safe-area-inset-top); /* Только челка, ни пикселем больше */
-            height: auto;
-            min-height: 50px;
-        }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
@@ -107,10 +113,9 @@
 
         #auth-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 50; background-color: #fff;
+            z-index: 50; background-color: inherit;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
-        .dark #auth-screen { background-color: #000; }
         .hidden-force { display: none !important; }
         
         #app { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
@@ -183,7 +188,10 @@ const tg = window.Telegram.WebApp;
 try { 
     tg.expand(); 
     if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
-    tg.setHeaderColor('#ffffff'); // Ставим белый, чтобы сливался (или черный в теме)
+    
+    // Красим системную шапку в цвет фона (белый или черный)
+    // Это создает эффект "приложения на весь экран"
+    tg.setHeaderColor('#ffffff'); 
 } catch(e) {}
 
 async function userClickedStart() {
@@ -216,7 +224,9 @@ async function performAccessCheck() {
     const urlParams = new URLSearchParams(window.location.search);
     const userId = tgUserId || urlParams.get('userId');
 
-    if (!userId && window.location.protocol === 'file:') {
+    // Локальный режим (file://) - ВСЕГДА ПУСКАЕМ
+    if (window.location.protocol === 'file:') {
+        console.log("Локальный режим: Доступ разрешен автоматически.");
         accessData = { allowed: true }; 
         processQuestions();
         checkStateTransition();
@@ -243,11 +253,7 @@ async function performAccessCheck() {
             accessError = { type: 'denied', msg: 'Доступ закрыт.' };
         }
     } catch (e) {
-        if (window.location.protocol === 'file:') {
-             accessError = { type: 'network', msg: 'CORS ошибка (локально).' };
-        } else {
-             accessError = { type: 'network', msg: 'Ошибка сети.' };
-        }
+        accessError = { type: 'network', msg: 'Ошибка сети.' };
     }
     checkStateTransition();
 }
@@ -591,9 +597,9 @@ function render() {
 
 function renderHeader() {
     const isHome = state.view === 'menu';
-    // HEADER-COMPACT класс для минимального отступа
+    // safe-header класс дает отступ под челку
     return `
-    <div class="header-compact bg-slate-50 dark:bg-black relative z-50 px-4 flex items-center justify-between transition-colors shadow-sm flex-shrink-0">
+    <div class="safe-header bg-slate-50 dark:bg-black transition-colors shadow-sm">
         <div class="flex items-center gap-3">
             ${!isHome ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
@@ -633,7 +639,7 @@ function renderFilterModal() {
     QUESTIONS_DATA.forEach(q => { topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1; });
 
     return `
-    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full" onclick="if(event.target === this) toggleFilterModal(false)">
+    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full safe-header" style="padding:0; padding-bottom:20px;" onclick="if(event.target === this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col max-h-[85vh] mb-4">
             <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3>
@@ -778,7 +784,7 @@ function renderLearn() {
     const questions = getFilteredQuestions('learn');
     return `
     <div class="flex flex-col h-full w-full">
-        <div id="learn-header" class="header-compact flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
+        <div class="safe-header flex-shrink-0 bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-3" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
@@ -934,46 +940,54 @@ function renderQuiz() {
     </div>`;
 }
 
+// УНИВЕРСАЛЬНЫЕ СОБЫТИЯ (МЫШЬ + ТАЧ) ДЛЯ КАРТОЧЕК
 function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
     
-    card.addEventListener('touchstart', (e) => {
+    let startX = 0;
+    let isDragging = false;
+
+    // Pointer events работают и для мыши, и для пальца
+    card.onpointerdown = (e) => {
         if (state.animState !== 'idle') return;
-        isCardDragging = true;
-        cardStartX = e.touches[0].clientX;
-        state.swipeX = 0;
+        // Если кликнули на кнопку прокрутки или текст - не свайпаем
+        if (e.target.closest('.card-scroll')) return; // Но даем скроллить контент
+        
+        isDragging = true;
+        startX = e.clientX;
         card.style.transition = 'none';
-    });
-    
-    card.addEventListener('touchmove', (e) => {
-        if (!isCardDragging) return;
-        const currentX = e.touches[0].clientX;
-        state.swipeX = currentX - cardStartX;
+        card.setPointerCapture(e.pointerId); // Захват курсора
+    };
+
+    card.onpointermove = (e) => {
+        if (!isDragging) return;
+        state.swipeX = e.clientX - startX;
         const rotation = state.swipeX * 0.05;
         card.style.transform = `translateX(${state.swipeX}px) rotate(${rotation}deg)`;
-    });
-    
-    card.addEventListener('touchend', () => {
-        if (!isCardDragging) return;
-        isCardDragging = false;
-        const SWIPE_THRESHOLD = 60;
+    };
+
+    card.onpointerup = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        card.releasePointerCapture(e.pointerId);
         
-        if (Math.abs(state.swipeX) < 5) {
-            toggleFlip();
-            card.style.transition = 'transform 0.3s ease-out';
+        // Если движение было маленьким - считаем это кликом (переворот)
+        if (Math.abs(state.swipeX) < 10) {
             card.style.transform = 'translateX(0px) rotate(0deg)';
+            toggleFlip(); // Переворачиваем
             return;
         }
 
+        const SWIPE_THRESHOLD = 100;
         if (state.swipeX > SWIPE_THRESHOLD) animateCard('prev');
         else if (state.swipeX < -SWIPE_THRESHOLD) animateCard('next');
         else {
             card.style.transition = 'transform 0.3s ease-out';
             card.style.transform = 'translateX(0px) rotate(0deg)';
-            state.swipeX = 0;
         }
-    });
+        state.swipeX = 0;
+    };
 }
 
 let cardStartX = 0;
@@ -1054,7 +1068,7 @@ function renderCards() {
                         <div class="absolute inset-0 backface-hidden flex flex-col items-center p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
                             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
                             
-                            <div class="card-scroll flex flex-col items-center no-scrollbar">
+                            <div class="card-scroll flex flex-col items-center no-scrollbar" onpointerdown="event.stopPropagation()">
                                 ${imageBlock}
                                 <h3 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-snug text-center mb-6">${question.question}</h3>
                                 <div class="w-full space-y-2 mb-4">
@@ -1073,7 +1087,7 @@ function renderCards() {
 
                         <div class="absolute inset-0 backface-hidden bg-black dark:bg-white p-8 flex flex-col items-center justify-center text-center text-white dark:text-black rounded-[2rem] shadow-2xl rotate-y-180">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
-                            <div class="card-scroll flex flex-col items-center justify-center no-scrollbar">
+                            <div class="card-scroll flex flex-col items-center justify-center no-scrollbar" onpointerdown="event.stopPropagation()">
                                 <div class="text-xl sm:text-2xl font-bold mb-6 text-[#FFD700] dark:text-blue-600 select-none leading-snug">
                                     ${correctText}
                                 </div>
