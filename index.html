@@ -11,7 +11,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Noto+Serif:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Noto+Serif:wght@700&display=swap" rel="stylesheet">
 
     <script src="questions.js"></script>
 
@@ -45,10 +45,10 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER: МАКСИМАЛЬНО ВЫСОКО --- */
+        /* --- HEADER: ИСПРАВЛЕН ОТСТУП (Кнопки не перекрываются) --- */
         .safe-header {
-            /* Убрали +10px. Теперь только системный отступ (челка/статусбар) */
-            padding-top: env(safe-area-inset-top); 
+            /* Добавили 20px к безопасному отступу */
+            padding-top: calc(env(safe-area-inset-top) + 20px); 
             padding-bottom: 12px;
             padding-left: 16px;
             padding-right: 16px;
@@ -60,10 +60,18 @@
             justify-content: space-between;
             flex-shrink: 0;
             border-bottom: 1px solid rgba(0,0,0,0.05);
-            /* Минимальная высота, чтобы кнопки были кликабельны */
-            min-height: calc(env(safe-area-inset-top) + 50px);
         }
         .dark .safe-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
+
+        /* --- КЛИК ПО КНОПКАМ (Сделал приятным и быстрым) --- */
+        .btn-click {
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.1s;
+            cursor: pointer;
+        }
+        .btn-click:active {
+            transform: scale(0.96);
+            opacity: 0.8;
+        }
 
         /* 3D КАРТОЧКИ */
         .perspective-1000 { perspective: 1000px; }
@@ -691,11 +699,11 @@ function renderHeader() {
     <div class="safe-header bg-slate-50 dark:bg-black transition-colors shadow-sm">
         <div class="flex items-center gap-3">
             ${!isHome ? `
-                <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
+                <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors btn-click">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
                 </button>
             ` : ''}
-            <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group">
+            <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group btn-click">
                 <div class="transition-transform group-hover:scale-105">
                     <img src="${state.isDark ? "https://i.ibb.co/tw2sGMTs/image.png" : "https://i.ibb.co/zWn4xWnk/image.png"}"
                             alt="Imed Logo"
@@ -708,13 +716,13 @@ function renderHeader() {
         </div>
         
         <div class="flex items-center gap-2">
-            <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors">
+            <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors btn-click">
                 <i data-lucide="rotate-cw" class="w-5 h-5"></i>
             </button>
-            <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors">
+            <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white transition-colors btn-click">
                 <i data-lucide="${state.isDark ? 'sun' : 'moon'}" class="w-6 h-6"></i>
             </button>
-            <a href="https://t.me/stewonly" target="_blank" class="p-2 text-slate-500 hover:text-[#2AABEE] dark:text-slate-400 dark:hover:text-[#2AABEE] transition-colors">
+            <a href="https://t.me/stewonly" target="_blank" class="p-2 text-slate-500 hover:text-[#2AABEE] dark:text-slate-400 dark:hover:text-[#2AABEE] transition-colors btn-click">
                 <i data-lucide="send" class="w-6 h-6"></i>
             </a>
         </div>
@@ -732,11 +740,11 @@ function renderFilterModal() {
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col max-h-[85vh] mb-4">
             <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3>
-                <button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+                <button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white btn-click">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700">
+            <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click">
                 <div class="flex items-center gap-3">
                     <div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
                         <i data-lucide="shuffle" class="w-5 h-5"></i>
@@ -751,7 +759,7 @@ function renderFilterModal() {
                 </div>
             </div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 scroll-y-auto">
-                <button onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center">
+                <button onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click">
                     <span>${allSelected ? 'Снять выделение' : 'Выбрать все'}</span>
                     <i data-lucide="${allSelected ? 'trash-2' : 'layers'}" class="w-4 h-4"></i>
                 </button>
@@ -759,7 +767,7 @@ function renderFilterModal() {
                     const isSelected = state.selectedTopics.includes(t);
                     const count = topicCounts[t] || 0;
                     return `
-                        <button onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group ${isSelected ? 'bg-black text-white dark:bg-white dark:text-black' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}">
+                        <button onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${isSelected ? 'bg-black text-white dark:bg-white dark:text-black' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}">
                             <div class="flex items-center min-w-0 flex-1">
                                 <span class="block text-wrap leading-tight pr-2">${t}</span>
                                 <span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${count})</span>
@@ -769,7 +777,7 @@ function renderFilterModal() {
                     `;
                 }).join('')}
             </div>
-            <button onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0">
+            <button onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">
                 Применить (${state.selectedTopics.length})
             </button>
         </div>
@@ -787,7 +795,7 @@ function renderMenu() {
             <div class="relative z-10">
                 <h1 class="text-3xl font-black mb-2 tracking-tight">Физиология</h1>
                 <p class="text-slate-400 font-medium text-sm mb-8">База: ${QUESTIONS_DATA.length} вопросов</p>
-                <button onclick="toggleFilterModal(true)" class="flex items-center gap-3 text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 w-fit px-5 py-3 rounded-xl border border-white/10 transition-all">
+                <button onclick="toggleFilterModal(true)" class="flex items-center gap-3 text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 w-fit px-5 py-3 rounded-xl border border-white/10 transition-all btn-click">
                     <i data-lucide="filter" class="w-4 h-4 text-white"></i>
                     <span>${allSelected ? 'Все темы' : `${state.selectedTopics.length} выбрано`}</span>
                 </button>
@@ -796,7 +804,7 @@ function renderMenu() {
         </div>
 
         ${state.resumeState ? `
-        <button onclick="startMode('${state.resumeState.mode}', true)" class="w-full bg-indigo-600 text-white p-5 rounded-[2rem] shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between group active:scale-[0.98] transition-all animate-slide-up">
+        <button onclick="startMode('${state.resumeState.mode}', true)" class="w-full bg-indigo-600 text-white p-5 rounded-[2rem] shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between group active:scale-[0.98] transition-all animate-slide-up btn-click">
             <div class="flex items-center gap-4">
                 <div class="bg-white/20 p-3 rounded-2xl">
                     <i data-lucide="play-circle" class="w-6 h-6 text-white"></i>
@@ -813,7 +821,7 @@ function renderMenu() {
         ` : ''}
 
         <div class="space-y-4">
-            <button onclick="startMode('learn')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.98]">
+            <button onclick="startMode('learn')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.98] btn-click">
                 <div class="flex items-center gap-5">
                     <div class="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-2xl text-yellow-700 dark:text-yellow-400 transition-colors">
                         <i data-lucide="book-open" class="w-6 h-6"></i>
@@ -826,7 +834,7 @@ function renderMenu() {
                 <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i>
             </button>
 
-            <button onclick="startMode('quiz')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.98]">
+            <button onclick="startMode('quiz')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.98] btn-click">
                 <div class="flex items-center gap-5">
                     <div class="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-2xl text-blue-700 dark:text-blue-400 transition-colors">
                         <i data-lucide="flask-conical" class="w-6 h-6"></i>
@@ -840,14 +848,14 @@ function renderMenu() {
             </button>
 
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="startMode('cards')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex flex-col items-center justify-center gap-4 active:scale-[0.98]">
+                <button onclick="startMode('cards')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click">
                     <div class="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-2xl text-emerald-700 dark:text-emerald-400">
                         <i data-lucide="brain" class="w-6 h-6"></i>
                     </div>
                     <span class="font-bold text-slate-900 dark:text-white text-sm">Карточки</span>
                 </button>
 
-                <button onclick="startMode('mistakes')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex flex-col items-center justify-center gap-4 active:scale-[0.98]">
+                <button onclick="startMode('mistakes')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click">
                     <div class="bg-rose-100 dark:bg-rose-900/30 p-3 rounded-2xl text-rose-700 dark:text-rose-400">
                         <i data-lucide="alert-triangle" class="w-6 h-6"></i>
                     </div>
@@ -874,13 +882,13 @@ function renderLearn() {
     return `
     <div class="flex flex-col h-full w-full">
         <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
-            <div class="flex items-center gap-3" onclick="goHome()">
+            <div class="flex items-center gap-3 btn-click" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
                 </button>
                 <h2 class="font-black text-xl text-slate-900 dark:text-white font-sans">Конспект</h2>
             </div>
-            <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
+            <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border btn-click ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
                 <i data-lucide="${state.hideAnswersInLearn ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>
                 ${state.hideAnswersInLearn ? 'Ответы' : 'Скрыть'}
             </button>
@@ -933,7 +941,7 @@ function renderQuiz() {
             <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-xs font-medium">
                 ${isMistakes ? 'Ошибок нет. Ты машина!' : 'Вопросов в этой категории больше нет.'}
             </p>
-            <button onclick="goHome()" class="bg-black dark:bg-white text-white dark:text-black px-10 py-4 rounded-2xl font-bold hover:scale-105 transition-transform">В меню</button>
+            <button onclick="goHome()" class="bg-black dark:bg-white text-white dark:text-black px-10 py-4 rounded-2xl font-bold hover:scale-105 transition-transform btn-click">В меню</button>
         </div>`;
     }
 
@@ -944,8 +952,8 @@ function renderQuiz() {
             <h2 class="text-3xl font-black text-slate-900 dark:text-white mb-2">Финиш!</h2>
             <p class="text-slate-500 dark:text-slate-400 mb-10 font-medium">Вопросы закончились.</p>
             <div class="flex flex-col gap-3 w-full max-w-xs">
-                <button onclick="startMode('${state.view}')" class="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg shadow-slate-300 dark:shadow-none">Пройти еще раз</button>
-                <button onclick="goHome()" class="w-full bg-transparent border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white py-4 rounded-2xl font-bold">В меню</button>
+                <button onclick="startMode('${state.view}')" class="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg shadow-slate-300 dark:shadow-none btn-click">Пройти еще раз</button>
+                <button onclick="goHome()" class="w-full bg-transparent border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white py-4 rounded-2xl font-bold btn-click">В меню</button>
             </div>
         </div>`;
     }
@@ -974,11 +982,11 @@ function renderQuiz() {
     return `
     <div class="flex flex-col h-full relative animate-fade-in w-full">
         
-        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
+        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'} btn-click">
             <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
         </button>
 
-        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90">
+        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90 btn-click">
             <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
         </button>
 
@@ -986,7 +994,7 @@ function renderQuiz() {
             <div class="h-full bg-black dark:bg-white transition-all duration-300 ease-out" style="width: ${progressPct}%"></div>
         </div>
 
-        <div class="scroll-y-auto p-4 px-14 max-w-xl mx-auto w-full">
+        <div class="scroll-y-auto p-4 px-4 w-full">
             <div class="flex justify-between items-start mb-4 gap-4">
                 <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 leading-tight">${question.topic}</span>
                 <span class="text-xs font-black text-slate-300 dark:text-slate-600 whitespace-nowrap mt-1">${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}</span>
@@ -994,11 +1002,11 @@ function renderQuiz() {
 
             ${imageBlock}
 
-            <h3 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${question.question}</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${question.question}</h3>
 
-            <div class="space-y-3">
+            <div class="space-y-3 max-w-xl mx-auto">
                 ${question.options.map((opt, idx) => {
-                    let btnStyle = "w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative ";
+                    let btnStyle = "w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative btn-click ";
                     if (!state.isAnswerChecked) {
                         if (state.selectedOptions.includes(idx)) btnStyle += "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.02]";
                         else btnStyle += "border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900";
@@ -1020,9 +1028,9 @@ function renderQuiz() {
         <div class="bottom-panel bg-slate-50/80 dark:bg-black/80 border-t border-slate-200 dark:border-slate-800">
             <div class="max-w-xl mx-auto">
                 ${!state.isAnswerChecked ? `
-                    <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
+                    <button onclick="checkAnswer()" ${state.selectedOptions.length === 0 ? 'disabled' : ''} class="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] btn-click ${state.selectedOptions.length > 0 ? 'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none' : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
                 ` : `
-                    <button onclick="nextQuestion()" class="w-full py-4 rounded-2xl font-bold text-lg active:scale-[0.98] flex items-center justify-center gap-2 ${nextBtnClass}">
+                    <button onclick="nextQuestion()" class="w-full py-4 rounded-2xl font-bold text-lg active:scale-[0.98] btn-click flex items-center justify-center gap-2 ${nextBtnClass}">
                         ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'Завершить' : nextBtnText}
                         <i data-lucide="chevron-right" class="w-5 h-5"></i>
                     </button>
@@ -1122,7 +1130,7 @@ function renderCards() {
         return `
         <div class="flex flex-col items-center justify-center h-full p-6 text-center w-full">
             <p class="text-slate-400 font-medium">Нет карточек</p>
-            <button onclick="goHome()" class="mt-4 text-slate-900 dark:text-white font-bold underline">В меню</button>
+            <button onclick="goHome()" class="mt-4 text-slate-900 dark:text-white font-bold underline btn-click">В меню</button>
         </div>`;
     }
 
@@ -1169,10 +1177,10 @@ function renderCards() {
                             </div>
                         </div>
 
-                        <div class="absolute inset-0 backface-hidden bg-black dark:bg-white p-8 flex flex-col items-center justify-center text-center text-white dark:text-black rounded-[2rem] shadow-2xl rotate-y-180">
+                        <div class="absolute inset-0 backface-hidden bg-white dark:bg-slate-800 p-8 flex flex-col items-center justify-center text-center text-slate-900 dark:text-white rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-indigo-500/50">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
                             <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar">
-                                <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-blue-600 select-none leading-snug">
+                                <div class="text-lg sm:text-xl font-bold mb-6 text-indigo-600 dark:text-indigo-400 select-none leading-snug">
                                     ${correctText}
                                 </div>
                             </div>
@@ -1183,8 +1191,8 @@ function renderCards() {
             </div>
 
             <div class="mt-2 flex gap-3 max-w-sm mx-auto w-full transition-opacity flex-shrink-0" style="margin-bottom: 20px;">
-                <button onclick="animateCard('prev')" class="flex-1 py-4 rounded-2xl font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">Назад</button>
-                <button onclick="animateCard('next')" ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'disabled' : ''} class="flex-[2] py-4 rounded-2xl font-bold transition-all ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed shadow-none' : 'bg-black dark:bg-white text-white dark:text-black shadow-xl shadow-slate-300 dark:shadow-none active:scale-[0.98]'}">Дальше</button>
+                <button onclick="animateCard('prev')" class="flex-1 py-4 rounded-2xl font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 btn-click">Назад</button>
+                <button onclick="animateCard('next')" ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'disabled' : ''} class="flex-[2] py-4 rounded-2xl font-bold transition-all btn-click ${state.currentQuestionIndex === state.playableQuestions.length - 1 ? 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed shadow-none' : 'bg-black dark:bg-white text-white dark:text-black shadow-xl shadow-slate-300 dark:shadow-none active:scale-[0.98]'}">Дальше</button>
             </div>
     </div>`;
 }
