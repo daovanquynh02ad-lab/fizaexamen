@@ -20,34 +20,35 @@
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
         html, body {
-            height: 100dvh; /* Динамическая высота для iOS */
+            height: 100dvh;
             width: 100%;
             background-color: #000;
             color: #000;
             font-family: 'Inter', sans-serif;
-            overflow: hidden; /* Запрещаем скролл самого body */
+            overflow: hidden;
         }
 
-        /* ГЛАВНЫЙ КОНТЕЙНЕР - FLEX КОЛОНКА */
+        /* ГЛАВНЫЙ КОНТЕЙНЕР */
         #mobile-wrapper {
             width: 100%;
             max-width: 480px;
             height: 100%;
             background-color: #fff;
             margin: 0 auto;
-            display: flex;           /* Включаем Flexbox */
-            flex-direction: column;  /* Вертикальная ориентация */
+            display: flex;
+            flex-direction: column;
             position: relative;
         }
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* 1. ШАПКА (Не сжимается) */
+        /* --- 1. ИСПРАВЛЕНИЕ ШАПКИ (РАДИКАЛЬНЫЙ ОТСТУП) --- */
         .layout-header {
-            flex-shrink: 0; /* Запрет сжатия */
+            flex-shrink: 0;
             width: 100%;
-            padding-top: calc(env(safe-area-inset-top) + 20px); /* Ваш отступ */
-            padding-bottom: 12px;
+            /* Увеличили до 60px + системный отступ. Это опустит шапку ниже кнопок ТГ */
+            padding-top: calc(env(safe-area-inset-top) + 60px); 
+            padding-bottom: 10px;
             padding-left: 16px;
             padding-right: 16px;
             z-index: 50;
@@ -59,26 +60,26 @@
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* 2. КОНТЕНТ (Занимает всё место, скроллится внутри) */
+        /* 2. КОНТЕНТ */
         .layout-content {
-            flex: 1; /* Растягивается на всё доступное место */
-            overflow-y: auto; /* Скролл только здесь */
+            flex: 1;
+            overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             width: 100%;
             position: relative;
-            padding: 0; /* Отступы задаем внутри конкретных view */
+            padding: 0;
         }
-        /* Скрываем скроллбар */
         .layout-content::-webkit-scrollbar { display: none; }
         .layout-content { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* 3. ПОДВАЛ (Не сжимается, прибит к низу потоком) */
+        /* 3. ПОДВАЛ (КНОПКИ СНИЗУ) */
         .layout-footer {
-            flex-shrink: 0; /* Запрет сжатия */
+            flex-shrink: 0;
             width: 100%;
-            padding: 16px;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 20px); /* Отступ для черты iOS */
-            background-color: inherit; /* Цвет фона как у родителя */
+            padding: 12px 16px;
+            /* Отступ снизу для iPhone полоски */
+            padding-bottom: calc(env(safe-area-inset-bottom) + 16px); 
+            background-color: inherit;
             border-top: 1px solid rgba(0,0,0,0.05);
             z-index: 50;
         }
@@ -100,7 +101,6 @@
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
 
-        /* ЭКРАНЫ */
         #intro-layer, #auth-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 9999;
@@ -125,163 +125,78 @@
 <body class="bg-slate-50 text-slate-900 transition-colors duration-300 selection:bg-[#FFD700] selection:text-black">
 
 <div id="mobile-wrapper" class="bg-slate-50 dark:bg-black">
-
     <!-- ИНТРО -->
     <div id="intro-layer">
-        <video id="intro-video" playsinline preload="auto" muted>
-            <source src="intro.mp4" type="video/mp4">
-        </video>
+        <video id="intro-video" playsinline preload="auto" muted><source src="intro.mp4" type="video/mp4"></video>
         <div id="start-text" onclick="userClickedStart()">
-            <div class="text-white font-bold text-base tracking-[0.2em] uppercase animate-pulse-text text-center px-4">
-                Нажмите, чтобы начать
-            </div>
+            <div class="text-white font-bold text-base tracking-[0.2em] uppercase animate-pulse-text text-center px-4">Нажмите, чтобы начать</div>
         </div>
     </div>
-
     <!-- ЗАГРУЗКА -->
     <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
-        <div class="animate-spin text-indigo-600 mb-4">
-            <i data-lucide="loader-2" class="w-10 h-10"></i>
-        </div>
+        <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
         <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
-
     <!-- ПРИЛОЖЕНИЕ -->
     <div id="app" class="hidden-force"></div>
-
 </div>
 
 <script>
-
-// =================================================================
 // 1. ИНИЦИАЛИЗАЦИЯ
-// =================================================================
-
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
-
-let accessData = null;
-let videoFinished = false;
-let accessError = null;
-
+let accessData = null; let videoFinished = false; let accessError = null;
 const tg = window.Telegram.WebApp;
-try {
-    tg.expand();
-    tg.requestFullscreen(); 
-    if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false;
-    tg.setHeaderColor('#ffffff');
-} catch(e) { console.error(e); }
+try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
 
-function haptic(type = 'light') {
-    if (tg.HapticFeedback) {
-        if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
-        else if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+function haptic(type='light') {
+    if(tg.HapticFeedback) {
+        if(type==='error') tg.HapticFeedback.notificationOccurred('error');
+        else if(type==='success') tg.HapticFeedback.notificationOccurred('success');
         else tg.HapticFeedback.impactOccurred(type);
-    } else if (navigator.vibrate) navigator.vibrate(10);
+    } else if(navigator.vibrate) navigator.vibrate(10);
 }
 
-// СВАЙП НАЗАД
-document.addEventListener('touchstart', (e) => {
-    if (e.touches[0].clientX < 40) {
-        window.swipeBackStartX = e.touches[0].clientX;
-        window.swipeBackStartY = e.touches[0].clientY;
-        window.isSwipingBack = true;
-    } else { window.isSwipingBack = false; }
-}, {passive: true});
-
-document.addEventListener('touchend', (e) => {
-    if (!window.isSwipingBack) return;
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
-    if ((endX - window.swipeBackStartX) > 60 && Math.abs(endY - window.swipeBackStartY) < 50) {
-        haptic('medium');
-        goHome();
-    }
-    window.isSwipingBack = false;
-}, {passive: true});
-
+document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
+document.addEventListener('touchend', (e)=>{if(!window.sw)return;const ex=e.changedTouches[0].clientX;const ey=e.changedTouches[0].clientY;if((ex-window.sx)>60 && Math.abs(ey-window.sy)<50){haptic('medium');goHome();}window.sw=false},{passive:true});
 
 async function userClickedStart() {
-    haptic('medium');
-    document.getElementById('start-text').remove();
-    const vid = document.getElementById('intro-video');
-    try {
-        vid.muted = false; 
-        await vid.play();
-        vid.onended = () => { videoFinished = true; checkStateTransition(); };
-    } catch (err) {
-        videoFinished = true; checkStateTransition();
-    }
+    haptic('medium'); document.getElementById('start-text').remove();
+    const vid=document.getElementById('intro-video');
+    try { vid.muted=false; await vid.play(); vid.onended=()=>{videoFinished=true;checkStateTransition();}; } 
+    catch(err){ videoFinished=true; checkStateTransition(); }
     performAccessCheck();
 }
 
 async function performAccessCheck() {
-    if (typeof physiology_questions === 'undefined') {
-        accessError = { type: 'file', msg: 'Файл questions.js не найден.' };
-        checkStateTransition(); return;
-    }
-
+    if(typeof physiology_questions==='undefined'){ accessError={type:'file',msg:'Файл questions.js не найден.'};checkStateTransition();return;}
     const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
-    if (window.location.protocol === 'file:') {
-        accessData = { allowed: true }; processQuestions(); checkStateTransition(); return;
-    }
-    if (!userId) {
-        accessError = { type: 'browser', msg: 'Зайдите через Telegram.' };
-        checkStateTransition(); return;
-    }
+    if(window.location.protocol==='file:'){ accessData={allowed:true};processQuestions();checkStateTransition();return;}
+    if(!userId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
+    
+    const ck = `imed_access_v1_${userId}`; const c = localStorage.getItem(ck);
+    if(c){ try{const p=JSON.parse(c);if(p.allowed){accessData=p;processQuestions();checkStateTransition();return;}}catch(e){localStorage.removeItem(ck);} }
 
-    const CACHE_KEY = `imed_access_v1_${userId}`;
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-        try {
-            const parsed = JSON.parse(cached);
-            if (parsed.allowed) { accessData = parsed; processQuestions(); checkStateTransition(); return; }
-        } catch(e) { localStorage.removeItem(CACHE_KEY); }
-    }
-
-    try {
-        const controller = new AbortController();
-        setTimeout(() => controller.abort(), 15000); 
-        const res = await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`, { signal: controller.signal });
-        const data = await res.json();
-        if (data.allowed) {
-            accessData = data;
-            localStorage.setItem(CACHE_KEY, JSON.stringify(data)); 
-            processQuestions();
-        } else accessError = { type: 'denied', msg: 'Доступ закрыт.' };
-    } catch (e) { accessError = { type: 'network', msg: 'Ошибка сети.' }; }
+    try{
+        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
+        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`,{signal:ctrl.signal});
+        const data=await res.json();
+        if(data.allowed){ accessData=data; localStorage.setItem(ck,JSON.stringify(data)); processQuestions(); }
+        else accessError={type:'denied',msg:'Доступ закрыт.'};
+    } catch(e){ accessError={type:'network',msg:'Ошибка сети.'}; }
     checkStateTransition();
 }
 
 function checkStateTransition() {
-    if (!videoFinished) return;
-    const intro = document.getElementById('intro-layer');
-    const auth = document.getElementById('auth-screen');
-    const app = document.getElementById('app');
-
-    if (accessError) {
-        if(intro) intro.style.display = 'none';
-        auth.classList.remove('hidden-force');
-        auth.innerHTML = `<div class="p-6 text-center"><h1 class="text-2xl font-bold mb-2">Ошибка</h1><p>${accessError.msg}</p></div>`;
-        return;
-    }
-
-    if (accessData) {
-        if(intro) {
-            intro.style.transition = 'opacity 0.5s';
-            intro.style.opacity = '0';
-            setTimeout(() => { intro.style.display = 'none'; app.classList.remove('hidden-force'); init(); }, 500);
-        } else {
-            app.classList.remove('hidden-force'); init();
-        }
-    } else {
-        if(intro) intro.style.display = 'none';
-        auth.classList.remove('hidden-force');
-    }
+    if(!videoFinished) return;
+    const intro=document.getElementById('intro-layer'), auth=document.getElementById('auth-screen'), app=document.getElementById('app');
+    if(accessError){ if(intro) intro.style.display='none'; auth.classList.remove('hidden-force'); auth.innerHTML=`<div class="p-6 text-center"><h1 class="text-2xl font-bold mb-2">Ошибка</h1><p>${accessError.msg}</p></div>`; return; }
+    if(accessData){
+        if(intro){ intro.style.transition='opacity 0.5s'; intro.style.opacity='0'; setTimeout(()=>{intro.style.display='none';app.classList.remove('hidden-force');init();},500); }
+        else { app.classList.remove('hidden-force'); init(); }
+    } else { if(intro) intro.style.display='none'; auth.classList.remove('hidden-force'); }
 }
 
-// =================================================================
 // 2. ДАННЫЕ
-// =================================================================
 const TOPIC_MAP = [
     { pages: 3,  title: "1. Биологические мембраны и транспорт веществ" },       
     { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" },                 
@@ -329,387 +244,178 @@ const TOPIC_MAP = [
     { pages: 52, title: "44. Возрастная физиология" }     
 ];
 
-let QUESTIONS_DATA = [];
-let availableTopics = [];
-
-function escapeHtml(text) {
-    if (!text) return "";
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
+function escapeHtml(t) { if(!t)return""; return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 function processQuestions() {
     if (typeof physiology_questions === 'undefined') return;
     const totalPages = TOPIC_MAP.reduce((s, t) => s + t.pages, 0);
     const qPerPage = physiology_questions.length / totalPages;
     let acc = 0;
-    
-    const RANGES = TOPIC_MAP.map(t => {
-        const start = acc;
-        acc += Math.round(t.pages * qPerPage);
-        return { title: t.title, start: start, end: acc };
-    });
+    const RANGES = TOPIC_MAP.map(t => { const s=acc; acc+=Math.round(t.pages*qPerPage); return {title:t.title,start:s,end:acc}; });
     if (RANGES.length) RANGES[RANGES.length-1].end = physiology_questions.length;
-
     QUESTIONS_DATA = physiology_questions.map((q, i) => {
         const t = RANGES.find(r => i >= r.start && i < r.end) || RANGES[RANGES.length-1];
-        let correct = [];
-        if (q.answer) correct = String(q.answer).split(',').map(s => parseInt(s.trim())-1).filter(n=>!isNaN(n));
-        
-        return {
-            id: q.id,
-            topic: t ? t.title : "Общее",
-            question: escapeHtml(q.question),
-            options: (q.options||[]).map(o => escapeHtml(o.replace(/^\d+\)\s*/, ''))),
-            correctIndices: correct,
-            image: q.image
-        };
+        let correct = []; if (q.answer) correct = String(q.answer).split(',').map(s => parseInt(s.trim())-1).filter(n=>!isNaN(n));
+        return { id: q.id, topic: t?t.title:"Общее", question: escapeHtml(q.question), options: (q.options||[]).map(o=>escapeHtml(o.replace(/^\d+\)\s*/,''))), correctIndices: correct, image: q.image };
     });
     availableTopics = [...new Set(QUESTIONS_DATA.map(q => q.topic))];
     state.selectedTopics = [...availableTopics];
 }
 
-// =================================================================
-// 3. LOGIC
-// =================================================================
+// 3. ЛОГИКА
 const state = {
-    view: 'menu',
-    isDark: false,
-    showFilterModal: false,
-    selectedTopics: [],
-    userProgress: {},
-    resumeState: null,
-    playableQuestions: [],
-    currentQuestionIndex: 0,
-    quizFinished: false,
-    sessionAnswers: {},
-    selectedOptions: [],
-    isAnswerChecked: false,
-    lastResult: false,
-    isShuffleEnabled: false,
-    comboStreak: 0,
-    hideAnswersInLearn: false,
-    isFlipped: false,
-    swipeX: 0,
-    animState: 'idle'
+    view: 'menu', isDark: false, showFilterModal: false, selectedTopics: [],
+    userProgress: {}, resumeState: null, playableQuestions: [],
+    currentQuestionIndex: 0, quizFinished: false, sessionAnswers: {},
+    selectedOptions: [], isAnswerChecked: false, lastResult: false,
+    isShuffleEnabled: false, comboStreak: 0, hideAnswersInLearn: false,
+    isFlipped: false, swipeX: 0, animState: 'idle'
 };
 
 function init() { render(); }
 
 function toggleTheme() {
-    haptic('light');
-    state.isDark = !state.isDark;
-    const body = document.documentElement;
-    const auth = document.getElementById('auth-screen');
-    if (state.isDark) {
-        body.classList.add('dark');
-        if(auth) auth.style.backgroundColor = '#000';
-        try{tg.setHeaderColor('#000000');}catch(e){}
-    } else {
-        body.classList.remove('dark');
-        if(auth) auth.style.backgroundColor = '#fff';
-        try{tg.setHeaderColor('#ffffff');}catch(e){}
-    }
+    haptic('light'); state.isDark = !state.isDark;
+    if(state.isDark) { document.documentElement.classList.add('dark'); if(document.getElementById('auth-screen')) document.getElementById('auth-screen').style.backgroundColor='#000'; try{tg.setHeaderColor('#000000');}catch(e){} }
+    else { document.documentElement.classList.remove('dark'); if(document.getElementById('auth-screen')) document.getElementById('auth-screen').style.backgroundColor='#fff'; try{tg.setHeaderColor('#ffffff');}catch(e){} }
     render();
 }
 
-function toggleFilterModal(show) {
-    if(show) haptic('light');
-    state.showFilterModal = show;
-    render();
-}
-
-function toggleShuffle() {
-    haptic('light');
-    state.isShuffleEnabled = !state.isShuffleEnabled;
-    render();
-}
-
-function toggleTopic(topic) {
-    if (state.selectedTopics.includes(topic)) state.selectedTopics = state.selectedTopics.filter(t => t !== topic);
-    else state.selectedTopics.push(topic);
-    if(state.showFilterModal) updateTopicListUI(); else render();
-}
-
-function toggleSelectAllTopics() {
-    haptic('medium');
-    if (state.selectedTopics.length === availableTopics.length) state.selectedTopics = [];
-    else state.selectedTopics = [...availableTopics];
-    if(state.showFilterModal) { updateTopicListUI(); updateSelectAllButtonUI(); } else render();
-}
+function toggleFilterModal(show) { if(show)haptic('light'); state.showFilterModal=show; render(); }
+function toggleShuffle() { haptic('light'); state.isShuffleEnabled=!state.isShuffleEnabled; render(); }
+function toggleTopic(t) { if(state.selectedTopics.includes(t)) state.selectedTopics=state.selectedTopics.filter(x=>x!==t); else state.selectedTopics.push(t); if(state.showFilterModal) updateTopicListUI(); else render(); }
+function toggleSelectAllTopics() { haptic('medium'); if(state.selectedTopics.length===availableTopics.length) state.selectedTopics=[]; else state.selectedTopics=[...availableTopics]; if(state.showFilterModal){updateTopicListUI();updateSelectAllButtonUI();} else render(); }
 
 function updateTopicListUI() {
-    const list = document.getElementById('topics-list');
-    if (!list) return;
-    const btns = list.querySelectorAll('button[data-topic]');
-    btns.forEach(btn => {
-        const t = btn.getAttribute('data-topic');
-        const sel = state.selectedTopics.includes(t);
-        const icon = btn.querySelector('.icon-area');
-        if (sel) {
-            btn.className = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click bg-black text-white dark:bg-white dark:text-black";
-            if(icon) icon.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>';
-        } else {
-            btn.className = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300";
-            if(icon) icon.innerHTML = '';
-        }
+    const list=document.getElementById('topics-list'); if(!list)return;
+    list.querySelectorAll('button[data-topic]').forEach(btn => {
+        const t=btn.getAttribute('data-topic'), sel=state.selectedTopics.includes(t), icon=btn.querySelector('.icon-area');
+        if(sel) { btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between gap-3 group btn-click bg-black text-white dark:bg-white dark:text-black"; if(icon) icon.innerHTML='<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>'; }
+        else { btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between gap-3 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"; if(icon) icon.innerHTML=''; }
     });
-    const apply = document.getElementById('apply-btn');
-    if(apply) apply.innerText = `Применить (${state.selectedTopics.length})`;
+    const apply=document.getElementById('apply-btn'); if(apply) apply.innerText=`Применить (${state.selectedTopics.length})`;
     lucide.createIcons();
 }
-
 function updateSelectAllButtonUI() {
-    const btn = document.getElementById('select-all-btn');
-    if(!btn) return;
-    const all = state.selectedTopics.length === availableTopics.length;
-    btn.innerHTML = `<span>${all ? 'Снять выделение' : 'Выбрать все'}</span><i data-lucide="${all?'trash-2':'layers'}" class="w-4 h-4"></i>`;
+    const btn=document.getElementById('select-all-btn'); if(!btn)return;
+    const all=state.selectedTopics.length===availableTopics.length;
+    btn.innerHTML=`<span>${all?'Снять выделение':'Выбрать все'}</span><i data-lucide="${all?'trash-2':'layers'}" class="w-4 h-4"></i>`;
     lucide.createIcons();
 }
 
 function getFilteredQuestions(mode) {
     let q = QUESTIONS_DATA.filter(x => state.selectedTopics.includes(x.topic));
-    if (mode === 'mistakes') q = q.filter(x => state.userProgress[x.id]?.status === 'wrong');
+    if (mode==='mistakes') q = q.filter(x => state.userProgress[x.id]?.status==='wrong');
     return q;
 }
 
 function startMode(mode, resume=false) {
     haptic('medium');
-    if (resume && state.resumeState?.mode === mode) { state.view = mode; render(); return; }
-    
+    if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
     let q = getFilteredQuestions(mode);
-    if (!q.length) { alert("Нет вопросов!"); return; }
-    
-    if ((mode === 'quiz' || mode === 'cards') && state.isShuffleEnabled) {
-        q = [...q].sort(() => Math.random() - 0.5);
-    }
-    
-    state.playableQuestions = q;
-    state.currentQuestionIndex = 0;
-    state.quizFinished = false;
-    state.comboStreak = 0;
-    state.view = mode;
-    state.sessionAnswers = {};
-    state.resumeState = null;
-    resetQuestionState();
-    render();
+    if(!q.length){ alert("Нет вопросов!"); return; }
+    if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
+    state.playableQuestions=q; state.currentQuestionIndex=0; state.quizFinished=false;
+    state.view=mode; state.sessionAnswers={}; state.resumeState=null; resetQuestionState(); render();
 }
 
-function resetQuestionState() {
-    state.selectedOptions = [];
-    state.isAnswerChecked = false;
-    state.lastResult = false;
-    state.isFlipped = false;
-    state.swipeX = 0;
-    state.animState = 'idle';
-}
-
-function saveCurrentState() {
-    state.sessionAnswers[state.currentQuestionIndex] = {
-        selectedOptions: [...state.selectedOptions],
-        isAnswerChecked: state.isAnswerChecked,
-        lastResult: state.lastResult
-    };
-}
-
+function resetQuestionState() { state.selectedOptions=[]; state.isAnswerChecked=false; state.lastResult=false; state.isFlipped=false; state.swipeX=0; state.animState='idle'; }
+function saveCurrentState() { state.sessionAnswers[state.currentQuestionIndex] = { selectedOptions: [...state.selectedOptions], isAnswerChecked: state.isAnswerChecked, lastResult: state.lastResult }; }
 function loadStateForIndex(i) {
-    if (state.sessionAnswers[i]) {
-        const s = state.sessionAnswers[i];
-        state.selectedOptions = s.selectedOptions;
-        state.isAnswerChecked = s.isAnswerChecked;
-        state.lastResult = s.lastResult;
-    } else resetQuestionState();
+    if(state.sessionAnswers[i]) { const s=state.sessionAnswers[i]; state.selectedOptions=s.selectedOptions; state.isAnswerChecked=s.isAnswerChecked; state.lastResult=s.lastResult; }
+    else resetQuestionState();
 }
 
 function handleOptionSelect(idx) {
-    if (state.isAnswerChecked) return;
-    haptic('light');
-    if (state.selectedOptions.includes(idx)) state.selectedOptions = state.selectedOptions.filter(x => x!==idx);
-    else state.selectedOptions.push(idx);
+    if(state.isAnswerChecked) return; haptic('light');
+    if(state.selectedOptions.includes(idx)) state.selectedOptions=state.selectedOptions.filter(x=>x!==idx); else state.selectedOptions.push(idx);
     render();
 }
-
 function checkAnswer() {
-    if (!state.selectedOptions.length) return;
-    state.isAnswerChecked = true;
-    const q = state.playableQuestions[state.currentQuestionIndex];
-    const sel = [...state.selectedOptions].sort().toString();
-    const corr = [...q.correctIndices].sort().toString();
-    state.lastResult = (sel === corr);
-    haptic(state.lastResult ? 'success' : 'error');
-    
-    if (state.lastResult) state.comboStreak++; else state.comboStreak = 0;
-    
-    state.userProgress[q.id] = {
-        status: state.lastResult ? 'correct' : 'wrong',
-        attempts: (state.userProgress[q.id]?.attempts || 0) + 1
-    };
-    saveCurrentState();
-    render();
+    if(!state.selectedOptions.length) return;
+    state.isAnswerChecked=true; const q=state.playableQuestions[state.currentQuestionIndex];
+    const sel=[...state.selectedOptions].sort().toString(), corr=[...q.correctIndices].sort().toString();
+    state.lastResult=(sel===corr); haptic(state.lastResult?'success':'error');
+    state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1 };
+    saveCurrentState(); render();
 }
-
 function nextQuestion() {
-    haptic('light');
-    saveCurrentState();
-    if (state.currentQuestionIndex < state.playableQuestions.length - 1) {
-        state.currentQuestionIndex++;
-        loadStateForIndex(state.currentQuestionIndex);
-        // Scroll content to top
-        const content = document.querySelector('.layout-content');
-        if(content) content.scrollTop = 0;
-    } else {
-        state.quizFinished = true;
-    }
+    haptic('light'); saveCurrentState();
+    if(state.currentQuestionIndex<state.playableQuestions.length-1) { state.currentQuestionIndex++; loadStateForIndex(state.currentQuestionIndex); document.querySelector('.layout-content').scrollTop=0; }
+    else state.quizFinished=true;
     render();
 }
-
 function prevQuestion() {
-    haptic('light');
-    saveCurrentState();
-    if (state.currentQuestionIndex > 0) {
-        state.currentQuestionIndex--;
-        loadStateForIndex(state.currentQuestionIndex);
-    }
+    haptic('light'); saveCurrentState();
+    if(state.currentQuestionIndex>0) { state.currentQuestionIndex--; loadStateForIndex(state.currentQuestionIndex); }
     render();
 }
-
 function goHome() {
     haptic('medium');
-    if (['quiz','cards','mistakes'].includes(state.view) && !state.quizFinished && state.playableQuestions.length) {
-        state.resumeState = { mode: state.view, index: state.currentQuestionIndex, questions: state.playableQuestions };
-    } else state.resumeState = null;
-    state.view = 'menu';
-    render();
+    if(['quiz','cards','mistakes'].includes(state.view) && !state.quizFinished && state.playableQuestions.length) state.resumeState={mode:state.view, index:state.currentQuestionIndex, questions:state.playableQuestions};
+    else state.resumeState=null;
+    state.view='menu'; render();
 }
 
-// =================================================================
-// 4. RENDER (HTML TEMPLATES)
-// =================================================================
-
+// 4. RENDER
 function render() {
-    const app = document.getElementById('app');
+    const app=document.getElementById('app');
+    let scrollTop=0; const cd=document.querySelector('.layout-content');
+    if(cd && app.dataset.view===state.view) scrollTop=cd.scrollTop;
+    app.dataset.view=state.view;
+
+    let bodyHTML=''; let footerHTML='';
+    if(state.view==='menu') bodyHTML=renderMenuContent();
+    else if(state.view==='learn') bodyHTML=renderLearnContent();
+    else if(state.view==='quiz'||state.view==='mistakes') { bodyHTML=renderQuizContent(); footerHTML=renderQuizFooter(); }
+    else if(state.view==='cards') { bodyHTML=renderCardsContent(); footerHTML=renderCardsFooter(); }
     
-    // Save scroll pos if view hasn't changed
-    let scrollTop = 0;
-    const contentDiv = document.querySelector('.layout-content');
-    if (contentDiv && app.dataset.view === state.view) scrollTop = contentDiv.scrollTop;
+    app.innerHTML = `${renderHeader()}<div class="layout-content bg-slate-50 dark:bg-black">${bodyHTML}</div>${footerHTML}${state.showFilterModal?renderFilterModal():''}`;
     
-    app.dataset.view = state.view;
-
-    // СТРУКТУРА: HEADER + CONTENT + FOOTER (FLEXBOX)
-    let headerHTML = renderHeader();
-    let footerHTML = '';
-    let bodyHTML = '';
-
-    if (state.view === 'menu') {
-        bodyHTML = renderMenuContent();
-    } else if (state.view === 'learn') {
-        bodyHTML = renderLearnContent();
-    } else if (state.view === 'quiz' || state.view === 'mistakes') {
-        bodyHTML = renderQuizContent();
-        footerHTML = renderQuizFooter();
-    } else if (state.view === 'cards') {
-        bodyHTML = renderCardsContent();
-        footerHTML = renderCardsFooter();
-    }
-
-    let modalHTML = state.showFilterModal ? renderFilterModal() : '';
-
-    app.innerHTML = `
-        ${headerHTML}
-        <div class="layout-content bg-slate-50 dark:bg-black">
-            ${bodyHTML}
-        </div>
-        ${footerHTML}
-        ${modalHTML}
-    `;
-
-    if (state.view === 'cards') setTimeout(initCardEvents, 0);
-    if (contentDiv && scrollTop > 0) document.querySelector('.layout-content').scrollTop = scrollTop;
+    if(state.view==='cards') setTimeout(initCardEvents,0);
+    if(cd && scrollTop>0) document.querySelector('.layout-content').scrollTop=scrollTop;
     lucide.createIcons();
 }
 
 function renderHeader() {
-    const isHome = state.view === 'menu';
-    return `
-    <div class="layout-header bg-slate-50 dark:bg-black transition-colors shadow-sm">
+    const isHome=state.view==='menu';
+    return `<div class="layout-header bg-slate-50 dark:bg-black shadow-sm">
         <div class="flex items-center gap-3">
-            ${!isHome ? `<button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors btn-click"><i data-lucide="chevron-left" class="w-7 h-7"></i></button>` : ''}
+            ${!isHome?`<button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white btn-click"><i data-lucide="chevron-left" class="w-7 h-7"></i></button>`:''}
             <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group btn-click">
-                <div class="transition-transform group-hover:scale-105">
-                    <img src="${state.isDark ? "https://i.ibb.co/tw2sGMTs/image.png" : "https://i.ibb.co/zWn4xWnk/image.png"}" class="w-10 h-10 object-contain rounded-[10px] shadow-sm">
-                </div>
-                <span class="font-bold text-2xl text-black dark:text-white tracking-tight flex items-baseline">
-                    <span class="font-serif mr-[1px]">I</span>med
-                </span>
+                <div class="transition-transform group-hover:scale-105"><img src="${state.isDark?"https://i.ibb.co/tw2sGMTs/image.png":"https://i.ibb.co/zWn4xWnk/image.png"}" class="w-10 h-10 object-contain rounded-[10px] shadow-sm"></div>
+                <span class="font-bold text-2xl text-black dark:text-white flex items-baseline"><span class="font-serif mr-[1px]">I</span>med</span>
             </div>
         </div>
         <div class="flex items-center gap-2">
             <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="rotate-cw" class="w-5 h-5"></i></button>
-            <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="${state.isDark ? 'sun' : 'moon'}" class="w-6 h-6"></i></button>
+            <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="${state.isDark?'sun':'moon'}" class="w-6 h-6"></i></button>
         </div>
     </div>`;
 }
 
 function renderMenuContent() {
-    const learned = Object.values(state.userProgress).filter(p=>p.status==='correct').length;
-    const errors = Object.values(state.userProgress).filter(p=>p.status==='wrong').length;
-    const allSel = state.selectedTopics.length === availableTopics.length;
-
-    return `
-    <div class="p-4 space-y-6 animate-fade-in pb-10">
-        <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-8 text-white shadow-soft dark:shadow-none transition-colors relative overflow-hidden">
+    const learned=Object.values(state.userProgress).filter(p=>p.status==='correct').length;
+    const errors=Object.values(state.userProgress).filter(p=>p.status==='wrong').length;
+    const allSel=state.selectedTopics.length===availableTopics.length;
+    return `<div class="p-4 space-y-6 animate-fade-in pb-10">
+        <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-8 text-white shadow-soft dark:shadow-none relative overflow-hidden">
             <div class="relative z-10">
                 <h1 class="text-3xl font-black mb-2 tracking-tight">Физиология</h1>
                 <p class="text-slate-400 font-medium text-sm mb-8">База: ${QUESTIONS_DATA.length} вопросов</p>
-                <button onclick="toggleFilterModal(true)" class="flex items-center gap-3 text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 w-fit px-5 py-3 rounded-xl border border-white/10 transition-all btn-click">
-                    <i data-lucide="filter" class="w-4 h-4 text-white"></i>
-                    <span>${allSel ? 'Все темы' : `${state.selectedTopics.length} выбрано`}</span>
-                </button>
+                <button onclick="toggleFilterModal(true)" class="flex items-center gap-3 text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 w-fit px-5 py-3 rounded-xl border border-white/10 btn-click"><i data-lucide="filter" class="w-4 h-4"></i><span>${allSel?'Все темы':`${state.selectedTopics.length} выбрано`}</span></button>
             </div>
             <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
         </div>
-
-        ${state.resumeState ? `
-        <button onclick="startMode('${state.resumeState.mode}', true)" class="w-full bg-indigo-600 text-white p-5 rounded-[2rem] shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between group active:scale-[0.98] transition-all animate-slide-up btn-click">
-            <div class="flex items-center gap-4">
-                <div class="bg-white/20 p-3 rounded-2xl"><i data-lucide="play-circle" class="w-6 h-6 text-white"></i></div>
-                <div class="text-left">
-                    <span class="block font-black text-lg">Продолжить</span>
-                    <span class="text-indigo-100 text-xs font-bold uppercase tracking-wide">
-                        ${state.resumeState.mode==='quiz'?'Тест':(state.resumeState.mode==='cards'?'Карточки':'Ошибки')} • Вопрос ${state.resumeState.index + 1}
-                    </span>
-                </div>
-            </div>
-            <i data-lucide="chevron-right" class="w-5 h-5 text-indigo-200"></i>
-        </button>`:''}
-
+        ${state.resumeState ? `<button onclick="startMode('${state.resumeState.mode}', true)" class="w-full bg-indigo-600 text-white p-5 rounded-[2rem] shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between group active:scale-[0.98] animate-slide-up btn-click"><div class="flex items-center gap-4"><div class="bg-white/20 p-3 rounded-2xl"><i data-lucide="play-circle" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-lg">Продолжить</span><span class="text-indigo-100 text-xs font-bold uppercase tracking-wide">${state.resumeState.mode==='quiz'?'Тест':(state.resumeState.mode==='cards'?'Карточки':'Ошибки')} • Вопрос ${state.resumeState.index+1}</span></div></div><i data-lucide="chevron-right" class="w-5 h-5"></i></button>`:''}
         <div class="space-y-4">
-            <button onclick="startMode('learn')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.98] btn-click">
-                <div class="flex items-center gap-5">
-                    <div class="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-2xl text-yellow-700 dark:text-yellow-400"><i data-lucide="book-open" class="w-6 h-6"></i></div>
-                    <div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-lg">Конспект</span><span class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">Учить вопросы</span></div>
-                </div>
-                <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i>
-            </button>
-            <button onclick="startMode('quiz')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.98] btn-click">
-                <div class="flex items-center gap-5">
-                    <div class="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-2xl text-blue-700 dark:text-blue-400"><i data-lucide="flask-conical" class="w-6 h-6"></i></div>
-                    <div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-lg">Тест</span><span class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">Проверить знания</span></div>
-                </div>
-                <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i>
-            </button>
+            <button onclick="startMode('learn')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex justify-between items-center group active:scale-[0.98] btn-click"><div class="flex items-center gap-5"><div class="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-2xl text-yellow-700 dark:text-yellow-400"><i data-lucide="book-open" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-lg">Конспект</span><span class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">Учить вопросы</span></div></div><i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i></button>
+            <button onclick="startMode('quiz')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex justify-between items-center group active:scale-[0.98] btn-click"><div class="flex items-center gap-5"><div class="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-2xl text-blue-700 dark:text-blue-400"><i data-lucide="flask-conical" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-lg">Тест</span><span class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">Проверить знания</span></div></div><i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i></button>
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="startMode('cards')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click">
-                    <div class="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-2xl text-emerald-700 dark:text-emerald-400"><i data-lucide="brain" class="w-6 h-6"></i></div>
-                    <span class="font-bold text-slate-900 dark:text-white text-sm">Карточки</span>
-                </button>
-                <button onclick="startMode('mistakes')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg transition-all flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click">
-                    <div class="bg-rose-100 dark:bg-rose-900/30 p-3 rounded-2xl text-rose-700 dark:text-rose-400"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
-                    <span class="font-bold text-slate-900 dark:text-white text-sm">Ошибки</span>
-                </button>
+                <button onclick="startMode('cards')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click"><div class="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-2xl text-emerald-700 dark:text-emerald-400"><i data-lucide="brain" class="w-6 h-6"></i></div><span class="font-bold text-slate-900 dark:text-white text-sm">Карточки</span></button>
+                <button onclick="startMode('mistakes')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click"><div class="bg-rose-100 dark:bg-rose-900/30 p-3 rounded-2xl text-rose-700 dark:text-rose-400"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><span class="font-bold text-slate-900 dark:text-white text-sm">Ошибки</span></button>
             </div>
         </div>
-
         <div class="grid grid-cols-2 gap-4 pt-2">
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-3xl font-black text-slate-900 dark:text-white">${learned}</span><span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Выучено</span></div>
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-3xl font-black text-slate-900 dark:text-white">${errors}</span><span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ошибок</span></div>
@@ -717,68 +423,45 @@ function renderMenuContent() {
     </div>`;
 }
 
+// 5. КОМПАКТНЫЙ КОНСПЕКТ (Fix)
 function renderLearnContent() {
-    const qList = getFilteredQuestions('learn');
-    return `
-    <div class="p-4 space-y-6 pb-20 animate-fade-in">
-        <div class="flex justify-end mb-2">
-             <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border btn-click ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
-                <i data-lucide="${state.hideAnswersInLearn ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>${state.hideAnswersInLearn ? 'Ответы' : 'Скрыть'}
-            </button>
-        </div>
+    const qList=getFilteredQuestions('learn');
+    return `<div class="p-4 space-y-4 pb-20 animate-fade-in">
+        <div class="flex justify-end mb-2"><button onclick="state.hideAnswersInLearn=!state.hideAnswersInLearn;render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl border btn-click ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}"><i data-lucide="${state.hideAnswersInLearn?'eye':'eye-off'}" class="w-4 h-4"></i>${state.hideAnswersInLearn?'Ответы':'Скрыть'}</button></div>
         ${qList.map(q => `
             <div class="border border-black dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-black shadow-sm">
-                <div class="bg-slate-100 dark:bg-slate-900 border-b border-black dark:border-slate-700 p-3 flex justify-between gap-4 px-4"><span class="font-bold text-black dark:text-slate-300 text-xs tracking-widest uppercase flex-1">${q.topic}</span><span class="font-bold text-slate-500 dark:text-slate-400 text-xs">#${q.id}</span></div>
-                <div class="p-5 border-b border-black dark:border-slate-800 bg-white dark:bg-black">
-                    ${q.image ? `<img src="${q.image}" class="w-full h-auto max-h-60 object-contain mb-4 rounded border border-slate-100 dark:border-slate-800">`:''}
-                    <div class="font-bold text-black dark:text-white leading-snug text-lg">${q.question}</div>
+                <div class="bg-slate-100 dark:bg-slate-900 border-b border-black dark:border-slate-700 p-2 flex justify-between gap-4 px-4"><span class="font-bold text-black dark:text-slate-300 text-[10px] tracking-widest uppercase flex-1">${q.topic}</span><span class="font-bold text-slate-500 dark:text-slate-400 text-[10px]">#${q.id}</span></div>
+                <div class="p-3 border-b border-black dark:border-slate-800 bg-white dark:bg-black">
+                    ${q.image?`<img src="${q.image}" class="w-full h-auto max-h-40 object-contain mb-2 rounded border border-slate-100 dark:border-slate-800">`:''}
+                    <div class="font-bold text-black dark:text-white leading-snug text-sm">${q.question}</div>
                 </div>
                 <div class="divide-y divide-black dark:divide-slate-800">
                     ${q.options.map((opt, i) => {
-                        const isC = q.correctIndices.includes(i);
-                        let bg = "bg-white dark:bg-black";
-                        if (!state.hideAnswersInLearn && isC) bg = "bg-[#FFD700] dark:bg-yellow-700 dark:text-white";
-                        return `<div class="flex"><div class="w-10 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-sm font-bold ${bg}">${i+1})</div><div class="flex-1 p-4 text-sm font-medium ${bg}">${opt}</div></div>`;
+                        const isC=q.correctIndices.includes(i); let bg="bg-white dark:bg-black"; if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] dark:bg-yellow-700 dark:text-white";
+                        return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bg}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bg}">${opt}</div></div>`;
                     }).join('')}
                 </div>
-            </div>
-        `).join('')}
+            </div>`).join('')}
     </div>`;
 }
 
 function renderQuizContent() {
-    if (!state.playableQuestions.length || state.quizFinished) return renderQuizFinished();
-    
-    const q = state.playableQuestions[state.currentQuestionIndex];
-    const pct = ((state.currentQuestionIndex + 1) / state.playableQuestions.length) * 100;
-    
-    return `
-    <div class="flex flex-col h-full animate-fade-in relative">
-        <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 shrink-0"><div class="h-full bg-black dark:bg-white transition-all duration-300" style="width: ${pct}%"></div></div>
-        
+    if(!state.playableQuestions.length || state.quizFinished) return renderQuizFinished();
+    const q=state.playableQuestions[state.currentQuestionIndex];
+    const pct=((state.currentQuestionIndex+1)/state.playableQuestions.length)*100;
+    return `<div class="flex flex-col h-full animate-fade-in relative">
+        <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 shrink-0"><div class="h-full bg-black dark:bg-white transition-all duration-300" style="width:${pct}%"></div></div>
         <div class="p-4 w-full max-w-xl mx-auto pb-10">
-            <div class="flex justify-between items-start mb-4 gap-4">
-                <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 leading-tight">${q.topic}</span>
-                <span class="text-xs font-black text-slate-300 dark:text-slate-600 whitespace-nowrap mt-1">${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}</span>
-            </div>
-            
-            ${q.image ? `<div class="mb-4 w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700"><img src="${q.image}" class="w-full h-full object-contain"></div>` : ''}
-
+            <div class="flex justify-between items-start mb-4 gap-4"><span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 leading-tight">${q.topic}</span><span class="text-xs font-black text-slate-300 dark:text-slate-600 whitespace-nowrap mt-1">${state.currentQuestionIndex+1} / ${state.playableQuestions.length}</span></div>
+            ${q.image?`<div class="mb-4 w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700"><img src="${q.image}" class="w-full h-full object-contain"></div>`:''}
             <h3 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${q.question}</h3>
-
             <div class="space-y-3">
                 ${q.options.map((opt, i) => {
-                    let cls = "w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative btn-click ";
-                    if (!state.isAnswerChecked) {
-                        if (state.selectedOptions.includes(i)) cls += "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.01]";
-                        else cls += "border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900";
-                    } else {
-                        const sel = state.selectedOptions.includes(i);
-                        const corr = q.correctIndices.includes(i);
-                        if (sel && corr) cls += "border-emerald-500 bg-emerald-500 text-white shadow-md";
-                        else if (sel && !corr) cls += "border-rose-500 bg-rose-500 text-white shadow-md";
-                        else if (!sel && corr) cls += "border-[3px] border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold";
-                        else cls += "border-transparent bg-slate-100 text-slate-400 opacity-50 dark:bg-slate-800 dark:text-slate-600";
+                    let cls="w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative btn-click ";
+                    if(!state.isAnswerChecked) { if(state.selectedOptions.includes(i)) cls+="border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.01]"; else cls+="border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900"; }
+                    else {
+                        const sel=state.selectedOptions.includes(i), corr=q.correctIndices.includes(i);
+                        if(sel&&corr) cls+="border-emerald-500 bg-emerald-500 text-white shadow-md"; else if(sel&&!corr) cls+="border-rose-500 bg-rose-500 text-white shadow-md"; else if(!sel&&corr) cls+="border-[3px] border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold"; else cls+="border-transparent bg-slate-100 text-slate-400 opacity-50 dark:bg-slate-800 dark:text-slate-600";
                     }
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
@@ -788,85 +471,49 @@ function renderQuizContent() {
 }
 
 function renderQuizFooter() {
-    if (!state.playableQuestions.length || state.quizFinished) return '';
-    let btnText = "Дальше", btnCls = "bg-black text-white shadow-lg dark:bg-white dark:text-black";
-    if (state.isAnswerChecked) {
-        if (state.lastResult) { btnText = "Верно!"; btnCls = "bg-emerald-500 text-white shadow-emerald-200 shadow-lg"; }
-        else { btnText = "Ошибка"; btnCls = "bg-rose-500 text-white shadow-rose-200 shadow-lg"; }
-    }
-    
-    return `
-    <div class="layout-footer bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
+    if(!state.playableQuestions.length || state.quizFinished) return '';
+    let btnText="Дальше", btnCls="bg-black text-white shadow-lg dark:bg-white dark:text-black";
+    if(state.isAnswerChecked) { if(state.lastResult) { btnText="Верно!"; btnCls="bg-emerald-500 text-white shadow-emerald-200 shadow-lg"; } else { btnText="Ошибка"; btnCls="bg-rose-500 text-white shadow-rose-200 shadow-lg"; } }
+    return `<div class="layout-footer bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
         <div class="max-w-xl mx-auto flex gap-3 items-stretch">
-            <button onclick="prevQuestion()" ${state.currentQuestionIndex===0?'disabled':''} class="px-5 rounded-2xl font-bold text-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-30 btn-click">
-                <i data-lucide="chevron-left" class="w-6 h-6"></i>
-            </button>
-
-            ${!state.isAnswerChecked ? `
-                <button onclick="checkAnswer()" ${state.selectedOptions.length===0?'disabled':''} class="flex-1 py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] btn-click ${state.selectedOptions.length>0?'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none':'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>
-            ` : `
-                <button onclick="nextQuestion()" class="flex-1 py-4 rounded-2xl font-bold text-lg active:scale-[0.98] btn-click flex items-center justify-center gap-2 ${btnCls}">
-                    ${state.currentQuestionIndex===state.playableQuestions.length-1 ? 'Завершить' : btnText}
-                </button>
-            `}
-            
-            <button onclick="nextQuestion()" ${state.currentQuestionIndex===state.playableQuestions.length-1?'disabled':''} class="px-5 rounded-2xl font-bold text-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-30 btn-click">
-                <i data-lucide="chevron-right" class="w-6 h-6"></i>
-            </button>
+            <button onclick="prevQuestion()" ${state.currentQuestionIndex===0?'disabled':''} class="px-5 rounded-2xl font-bold text-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-30 btn-click"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
+            ${!state.isAnswerChecked ? `<button onclick="checkAnswer()" ${state.selectedOptions.length===0?'disabled':''} class="flex-1 py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform active:scale-[0.98] btn-click ${state.selectedOptions.length>0?'bg-black text-white shadow-slate-300 dark:bg-white dark:text-black dark:shadow-none':'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed'}">Проверить</button>` : `<button onclick="nextQuestion()" class="flex-1 py-4 rounded-2xl font-bold text-lg active:scale-[0.98] btn-click flex items-center justify-center gap-2 ${btnCls}">${state.currentQuestionIndex===state.playableQuestions.length-1?'Завершить':btnText}</button>`}
+            <button onclick="nextQuestion()" ${state.currentQuestionIndex===state.playableQuestions.length-1?'disabled':''} class="px-5 rounded-2xl font-bold text-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-30 btn-click"><i data-lucide="chevron-right" class="w-6 h-6"></i></button>
         </div>
     </div>`;
 }
 
 function renderQuizFinished() {
-    return `
-    <div class="flex flex-col items-center justify-center h-full p-6 text-center animate-fade-in">
-        ${state.playableQuestions.length === 0 ? `
-            <div class="bg-slate-100 dark:bg-slate-800 p-6 rounded-full mb-6"><i data-lucide="${state.view==='mistakes'?'check-circle':'filter'}" class="w-12 h-12 text-slate-400 dark:text-slate-600"></i></div>
-            <h2 class="text-2xl font-black text-slate-900 dark:text-white mb-2">Пусто</h2>
-            <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-xs font-medium">Нет вопросов в этой категории.</p>
-        ` : `
-            <i data-lucide="award" class="w-24 h-24 text-yellow-400 mb-6 drop-shadow-xl"></i>
-            <h2 class="text-3xl font-black text-slate-900 dark:text-white mb-2">Финиш!</h2>
-            <p class="text-slate-500 dark:text-slate-400 mb-10 font-medium">Вопросы закончились.</p>
-            <div class="flex flex-col gap-3 w-full max-w-xs">
-                <button onclick="startMode('${state.view}')" class="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Пройти еще раз</button>
-            </div>
-        `}
+    return `<div class="flex flex-col items-center justify-center h-full p-6 text-center animate-fade-in">
+        ${state.playableQuestions.length===0 ? `<div class="bg-slate-100 dark:bg-slate-800 p-6 rounded-full mb-6"><i data-lucide="${state.view==='mistakes'?'check-circle':'filter'}" class="w-12 h-12 text-slate-400 dark:text-slate-600"></i></div><h2 class="text-2xl font-black text-slate-900 dark:text-white mb-2">Пусто</h2><p class="text-slate-500 dark:text-slate-400 mb-8 max-w-xs font-medium">Нет вопросов.</p>` : `<i data-lucide="award" class="w-24 h-24 text-yellow-400 mb-6 drop-shadow-xl"></i><h2 class="text-3xl font-black text-slate-900 dark:text-white mb-2">Финиш!</h2><p class="text-slate-500 dark:text-slate-400 mb-10 font-medium">Вопросы закончились.</p><div class="flex flex-col gap-3 w-full max-w-xs"><button onclick="startMode('${state.view}')" class="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Пройти еще раз</button></div>`}
         <button onclick="goHome()" class="mt-4 bg-transparent border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-10 py-4 rounded-2xl font-bold btn-click">В меню</button>
     </div>`;
 }
 
 function renderCardsContent() {
-    if (!state.playableQuestions.length) return renderQuizFinished();
-    const q = state.playableQuestions[state.currentQuestionIndex];
-    const correctText = q.correctIndices.map(i => q.options[i]).join('<br><br>');
-    const imageBlock = q.image ? `<div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0"><img src="${q.image}" class="w-full h-full object-contain"></div>` : '';
-
-    return `
-    <div class="flex flex-col h-full p-4 overflow-hidden select-none animate-fade-in relative">
+    if(!state.playableQuestions.length) return renderQuizFinished();
+    const q=state.playableQuestions[state.currentQuestionIndex];
+    const correctText=q.correctIndices.map(i=>q.options[i]).join('<br><br>');
+    const imageBlock=q.image?`<div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0"><img src="${q.image}" class="w-full h-full object-contain"></div>`:'';
+    return `<div class="flex flex-col h-full p-4 overflow-hidden select-none animate-fade-in relative">
         <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">${state.currentQuestionIndex+1} / ${state.playableQuestions.length}</div>
-        
         <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full mb-4">
             <div id="flashcard" class="w-full h-full relative">
-                <div id="card-inner" onclick="toggleFlip()" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped ? 'rotate-y-180' : ''}">
+                <div id="card-inner" onclick="toggleFlip()" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped?'rotate-y-180':''}">
                     <!-- FRONT -->
                     <div class="absolute inset-0 backface-hidden flex flex-col p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800 items-start overflow-hidden">
                          <div class="w-full flex justify-center mb-2"><div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${q.topic}</div></div>
                          <div class="w-full flex flex-col gap-4 flex-1 overflow-y-auto no-scrollbar justify-start">
                              ${imageBlock}
                              <h3 class="text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${q.question}</h3>
-                             <div class="w-full space-y-2">
-                                 ${q.options.map(opt => `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`).join('')}
-                             </div>
+                             <div class="w-full space-y-2">${q.options.map(opt=>`<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`).join('')}</div>
                          </div>
                          <div class="mt-auto w-full text-center pt-2"><span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа</span></div>
                     </div>
                     <!-- BACK -->
-                    <div class="absolute inset-0 backface-hidden bg-black dark:bg-slate-800 p-8 flex flex-col items-center justify-center text-center rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-slate-600">
-                        <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white">Правильный ответ</h3>
-                        <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar">
-                            <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] select-none leading-snug">${correctText}</div>
-                        </div>
+                    <div class="absolute inset-0 backface-hidden bg-black dark:bg-zinc-800 p-8 flex flex-col items-center justify-center text-center text-white dark:text-white rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-slate-600">
+                        <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
+                        <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar"><div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] select-none leading-snug">${correctText}</div></div>
                     </div>
                 </div>
             </div>
@@ -875,9 +522,8 @@ function renderCardsContent() {
 }
 
 function renderCardsFooter() {
-    if (!state.playableQuestions.length) return '';
-    return `
-    <div class="layout-footer bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
+    if(!state.playableQuestions.length) return '';
+    return `<div class="layout-footer bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
         <div class="max-w-sm mx-auto flex gap-3">
              <button onclick="animateCard('prev')" class="flex-1 py-4 rounded-2xl font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 btn-click">Назад</button>
              <button onclick="animateCard('next')" ${state.currentQuestionIndex===state.playableQuestions.length-1?'disabled':''} class="flex-[2] py-4 rounded-2xl font-bold transition-all btn-click ${state.currentQuestionIndex===state.playableQuestions.length-1?'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed shadow-none':'bg-black dark:bg-white text-white dark:text-black shadow-xl shadow-slate-300 dark:shadow-none active:scale-[0.98]'}">Дальше</button>
@@ -886,34 +532,16 @@ function renderCardsFooter() {
 }
 
 function renderFilterModal() {
-    if (!state.showFilterModal) return '';
-    const allSel = state.selectedTopics.length === availableTopics.length;
-    const counts = {}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
-
-    return `
-    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
+    if(!state.showFilterModal) return '';
+    const allSel=state.selectedTopics.length===availableTopics.length;
+    const counts={}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
+    return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
-            <div class="flex justify-between items-center mb-4 shrink-0">
-                <h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3>
-                <button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            
-            <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click">
-                <div class="flex items-center gap-3">
-                    <div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div>
-                    <div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div>
-                </div>
-                <div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div>
-            </div>
-
+            <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
-                <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click">
-                    <span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i>
-                </button>
-                ${availableTopics.map(t => {
-                    const sel = state.selectedTopics.includes(t);
-                    return `<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="flex items-center min-w-0 flex-1"><span class="block text-wrap leading-tight pr-2">${t}</span><span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${counts[t]||0})</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`;
-                }).join('')}
+                <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
+                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="flex items-center min-w-0 flex-1"><span class="block text-wrap leading-tight pr-2">${t}</span><span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${counts[t]||0})</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
             </div>
             <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить (${state.selectedTopics.length})</button>
         </div>
@@ -921,69 +549,25 @@ function renderFilterModal() {
 }
 
 function initCardEvents() {
-    const card = document.getElementById('flashcard');
-    if (!card) return;
-    let startX = 0, isDragging = false;
-    
-    card.addEventListener('pointerdown', (e) => {
-        if (state.animState !== 'idle') return;
-        isDragging = true; startX = e.clientX; state.swipeX = 0;
-        card.style.transition = 'none'; card.setPointerCapture(e.pointerId);
-    });
-    card.addEventListener('pointermove', (e) => {
-        if (!isDragging) return;
-        state.swipeX = e.clientX - startX;
-        card.style.transform = `translateX(${state.swipeX}px) rotate(${state.swipeX * 0.05}deg)`;
-    });
-    card.addEventListener('pointerup', (e) => {
-        if (!isDragging) return;
-        isDragging = false; card.releasePointerCapture(e.pointerId);
-        if (Math.abs(state.swipeX) > 100) animateCard(state.swipeX > 0 ? 'prev' : 'next');
-        else {
-            if(Math.abs(state.swipeX) < 10) toggleFlip();
-            else { card.style.transition = 'transform 0.3s ease-out'; card.style.transform = 'translateX(0px) rotate(0deg)'; }
-        }
-    });
+    const card=document.getElementById('flashcard'); if(!card)return;
+    let startX=0, isDragging=false;
+    card.addEventListener('pointerdown', (e)=>{if(state.animState!=='idle')return;isDragging=true;startX=e.clientX;state.swipeX=0;card.style.transition='none';card.setPointerCapture(e.pointerId)});
+    card.addEventListener('pointermove', (e)=>{if(!isDragging)return;state.swipeX=e.clientX-startX;card.style.transform=`translateX(${state.swipeX}px) rotate(${state.swipeX*0.05}deg)`});
+    card.addEventListener('pointerup', (e)=>{if(!isDragging)return;isDragging=false;card.releasePointerCapture(e.pointerId);if(Math.abs(state.swipeX)>100)animateCard(state.swipeX>0?'prev':'next');else{if(Math.abs(state.swipeX)<10)toggleFlip();else{card.style.transition='transform 0.3s ease-out';card.style.transform='translateX(0px) rotate(0deg)'}}});
 }
-
 function animateCard(dir) {
-    const card = document.getElementById('flashcard');
-    if ((dir === 'next' && state.currentQuestionIndex >= state.playableQuestions.length-1) || (dir === 'prev' && state.currentQuestionIndex <= 0)) {
-        card.style.transition = 'transform 0.3s ease-out'; card.style.transform = 'translateX(0) rotate(0deg)'; return;
-    }
-    state.animState = 'animating';
-    card.style.transition = 'transform 0.2s ease-in, opacity 0.2s ease-in';
-    card.style.transform = dir === 'next' ? 'translateX(-120vw) rotate(-20deg)' : 'translateX(120vw) rotate(20deg)';
-    card.style.opacity = '0';
-    
-    setTimeout(() => {
-        if(dir === 'next') state.currentQuestionIndex++; else state.currentQuestionIndex--;
-        state.isFlipped = false; state.swipeX = 0;
-        render();
-        const newCard = document.getElementById('flashcard');
-        newCard.style.transition = 'none';
-        newCard.style.transform = dir === 'next' ? 'translateX(120vw) rotate(20deg)' : 'translateX(-120vw) rotate(-20deg)';
-        newCard.style.opacity = '0';
-        requestAnimationFrame(() => {
-            newCard.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
-            newCard.style.transform = 'translateX(0) rotate(0deg)';
-            newCard.style.opacity = '1';
-            setTimeout(() => { state.animState = 'idle'; }, 300);
-        });
-    }, 200);
+    const card=document.getElementById('flashcard');
+    if((dir==='next'&&state.currentQuestionIndex>=state.playableQuestions.length-1)||(dir==='prev'&&state.currentQuestionIndex<=0)){card.style.transition='transform 0.3s ease-out';card.style.transform='translateX(0) rotate(0deg)';return}
+    state.animState='animating'; card.style.transition='transform 0.2s ease-in, opacity 0.2s ease-in'; card.style.transform=dir==='next'?'translateX(-120vw) rotate(-20deg)':'translateX(120vw) rotate(20deg)'; card.style.opacity='0';
+    setTimeout(()=>{
+        if(dir==='next')state.currentQuestionIndex++;else state.currentQuestionIndex--; state.isFlipped=false;state.swipeX=0;render();
+        const newCard=document.getElementById('flashcard'); newCard.style.transition='none'; newCard.style.transform=dir==='next'?'translateX(120vw) rotate(20deg)':'translateX(-120vw) rotate(-20deg)'; newCard.style.opacity='0';
+        requestAnimationFrame(()=>{newCard.style.transition='transform 0.3s ease-out, opacity 0.3s ease-out';newCard.style.transform='translateX(0) rotate(0deg)';newCard.style.opacity='1';setTimeout(()=>{state.animState='idle'},300)})
+    },200);
 }
+function toggleFlip(){state.isFlipped=!state.isFlipped;const i=document.getElementById('card-inner');if(state.isFlipped)i.classList.add('rotate-y-180');else i.classList.remove('rotate-y-180')}
 
-function toggleFlip() {
-    state.isFlipped = !state.isFlipped;
-    const inner = document.getElementById('card-inner');
-    if (state.isFlipped) inner.classList.add('rotate-y-180'); else inner.classList.remove('rotate-y-180');
-}
-
-window.onload = function() {
-    const startScreen = document.getElementById('start-screen-btn');
-    if(startScreen) startScreen.style.display = 'flex';
-};
-
+window.onload = function() { const s=document.getElementById('start-screen-btn'); if(s)s.style.display='flex'; };
 </script>
 </body>
 </html>
