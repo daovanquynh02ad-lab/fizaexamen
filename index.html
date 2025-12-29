@@ -18,8 +18,9 @@
     <style>
         /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
         html, body {
-            overscroll-behavior: none; 
-            touch-action: none;
+            overscroll-behavior-y: none;
+            /* Разрешаем стандартные жесты, но контролируем их JS */
+            touch-action: pan-x pan-y; 
             height: 100%;
             width: 100%;
             background-color: #000;
@@ -42,9 +43,8 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* ОТСТУП ПОД СИСТЕМНЫЕ КНОПКИ ТЕЛЕГРАМА */
+        /* ОТСТУП ПОД СИСТЕМНУЮ ШАПКУ */
         .safe-header-spacing {
-            /* 44px - высота шапки ТГ на iOS + безопасная зона */
             padding-top: calc(env(safe-area-inset-top) + 46px); 
             padding-bottom: 8px;
             padding-left: 16px;
@@ -64,24 +64,7 @@
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* КАРТОЧКА БЕЗ СКРОЛЛА - АВТОРАЗМЕР */
-        .card-container-fixed {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            overflow: hidden;
-            padding: 1rem;
-            justify-content: space-between;
-        }
-        
-        /* Классы для динамического размера шрифта */
-        .text-dynamic {
-            /* Базовый размер, будет переопределен JS если текста много */
-            font-size: 1rem; 
-            line-height: 1.3;
-        }
-
-        /* СКРОЛЛ ТОЛЬКО ДЛЯ СПИСКОВ */
+        /* СКРОЛЛ */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
@@ -162,7 +145,7 @@
 <script>
 
 // =================================================================
-// 1. СТАРТ
+// 1. СТАРТ И НАСТРОЙКИ
 // =================================================================
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
@@ -179,6 +162,11 @@ try {
     if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
     tg.setHeaderColor('#ffffff'); 
 } catch(e) {}
+
+// === ОБРАБОТКА КНОПКИ НАЗАД ОТ ТЕЛЕГРАМА ===
+tg.BackButton.onClick(function() {
+    goHome();
+});
 
 async function userClickedStart() {
     const btn = document.getElementById('start-screen-btn');
@@ -434,6 +422,7 @@ function getFilteredQuestions(viewMode) {
 function startMode(mode, isResume = false) {
     if (isResume && state.resumeState && state.resumeState.mode === mode) {
         state.view = mode;
+        updateBackButton();
         render();
         return;
     }
@@ -453,6 +442,8 @@ function startMode(mode, isResume = false) {
     state.sessionAnswers = {};
     state.resumeState = null;
     resetQuestionState();
+    
+    updateBackButton(); // Показываем кнопку "Назад"
     render();
 }
 
@@ -542,7 +533,16 @@ function goHome() {
         }
     }
     state.view = 'menu';
+    updateBackButton(); // Скрываем кнопку "Назад"
     render();
+}
+
+function updateBackButton() {
+    if (state.view === 'menu') {
+        tg.BackButton.hide();
+    } else {
+        tg.BackButton.show();
+    }
 }
 
 // =================================================================
@@ -554,6 +554,11 @@ function render() {
     let filterScrollPos = 0;
     const filterList = document.getElementById('topics-list');
     if(filterList) filterScrollPos = filterList.scrollTop;
+    
+    // Запоминаем скролл в приложении
+    let appScrollPos = 0;
+    const appScroll = document.querySelector('.scroll-y-auto');
+    if(appScroll) appScrollPos = appScroll.scrollTop;
 
     app.innerHTML = renderHeader();
     
@@ -569,6 +574,10 @@ function render() {
     
     if (state.view === 'cards') setTimeout(initCardEvents, 0);
 
+    // Восстанавливаем скролл (если мы в том же режиме)
+    const newAppScroll = document.querySelector('.scroll-y-auto');
+    if(newAppScroll && appScrollPos > 0) newAppScroll.scrollTop = appScrollPos;
+
     if(state.showFilterModal) {
         const newFilterList = document.getElementById('topics-list');
         if(newFilterList) newFilterList.scrollTop = filterScrollPos;
@@ -578,11 +587,10 @@ function render() {
 
 function renderHeader() {
     const isHome = state.view === 'menu';
-    // safe-header-spacing делает отступ от системной шапки ТГ
     return `
     <div class="safe-header-spacing bg-slate-50 dark:bg-black transition-colors shadow-sm">
         <div class="flex items-center gap-3">
-            ${!isHome ? `
+            ${!isHome && !tg.initData ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
                 </button>
@@ -865,8 +873,7 @@ function renderQuiz() {
 
     return `
     <div class="flex flex-col h-full relative animate-fade-in w-full safe-header-spacing" style="padding-top: 0 !important;">
-        <div class="safe-header-spacing">
-            </div>
+        <div class="safe-header-spacing"></div>
 
         <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
             <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
@@ -928,6 +935,26 @@ function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
     
+    // ДОБАВЛЯЕМ ОБРАБОТЧИК СВАЙПА ВЛЕВО ДЛЯ ВЫХОДА (НАВИГАЦИЯ НАЗАД)
+    document.addEventListener('touchstart', (e) => {
+        // Если жест от левого края (первые 30px)
+        if (e.changedTouches[0].clientX < 30) {
+            window.isSwipeBack = true;
+            window.swipeBackStartX = e.changedTouches[0].clientX;
+        } else {
+            window.isSwipeBack = false;
+        }
+    });
+
+    document.addEventListener('touchend', (e) => {
+        if (window.isSwipeBack) {
+            const diff = e.changedTouches[0].clientX - window.swipeBackStartX;
+            if (diff > 50) goHome(); // Если свайпнули вправо - назад
+            window.isSwipeBack = false;
+        }
+    });
+
+    // СОБЫТИЯ КАРТОЧКИ
     card.addEventListener('pointerdown', (e) => {
         if (state.animState !== 'idle') return;
         isCardDragging = true;
@@ -1023,19 +1050,13 @@ function renderCards() {
 
     const question = state.playableQuestions[state.currentQuestionIndex];
     const imageBlock = question.image ? `
-        <div class="mb-2 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
+        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
             <img src="${question.image}" class="w-full h-full object-contain" alt="Card Image">
         </div>
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
-    // АДАПТИВНЫЙ РАЗМЕР ШРИФТА
-    const qLen = question.question.length;
-    let qSizeClass = 'text-xl';
-    if (qLen > 100) qSizeClass = 'text-base';
-    if (qLen > 200) qSizeClass = 'text-sm';
-
-    // КАРТОЧКА БЕЗ СКРОЛЛА (card-container-fixed)
+    // ДИЗАЙН "БИОХИМИЯ" - ВСЁ СВЕРХУ, БЕЗ ЦЕНТРИРОВАНИЯ
     return `
     <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full safe-header-spacing" style="padding-top: 0 !important;">
             
@@ -1047,27 +1068,27 @@ function renderCards() {
                 <div id="flashcard" class="w-full h-full relative" style="transform: translate(0px, 0px);">
                     <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped ? 'rotate-y-180' : ''}">
                         
-                        <div class="absolute inset-0 backface-hidden flex flex-col items-center p-3 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
-                            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full shrink-0">${question.topic}</div>
+                        <div class="absolute inset-0 backface-hidden flex flex-col p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800 items-start overflow-hidden">
+                            <div class="w-full flex justify-center mb-2">
+                                <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${question.topic}</div>
+                            </div>
                             
-                            <div class="card-container-fixed w-full">
+                            <div class="w-full flex flex-col gap-4 flex-1">
                                 ${imageBlock}
-                                <div class="flex-1 flex items-center justify-center px-1">
-                                    <h3 class="${qSizeClass} font-bold text-slate-900 dark:text-white leading-snug text-center overflow-hidden text-ellipsis" style="display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical;">
-                                        ${question.question}
-                                    </h3>
-                                </div>
-                                <div class="w-full space-y-1 mt-2">
+                                <h3 class="text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${question.question}</h3>
+                                <div class="w-full space-y-2">
                                     ${question.options.map((opt, i) => `
-                                        <div class="w-full p-2 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left truncate">
+                                        <div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">
                                             ${opt}
                                         </div>
                                     `).join('')}
                                 </div>
                             </div>
                             
-                            <div class="mt-1 text-slate-400 text-[10px] font-bold flex items-center gap-1 opacity-50 shrink-0">
-                                <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми
+                            <div class="mt-auto w-full text-center pt-2">
+                                <span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50">
+                                    <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа
+                                </span>
                             </div>
                         </div>
 
