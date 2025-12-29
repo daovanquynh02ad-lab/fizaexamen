@@ -16,41 +16,60 @@
     <script src="questions.js"></script>
 
     <style>
+        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ ДЛЯ БЛОКИРОВКИ СВАЙПОВ ТЕЛЕГРАМА */
+        html {
+            overscroll-behavior: none; /* Запрещает "резиновый" эффект всей страницы */
+        }
+        
         body {
             font-family: 'Inter', sans-serif;
             -webkit-tap-highlight-color: transparent;
-            overscroll-behavior-y: none;
-            background-color: #000;
+            background-color: #000; /* Фон вокруг телефона на ПК */
             margin: 0;
+            padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: center; /* Центрируем по вертикали на ПК */
             min-height: 100vh;
+            width: 100vw;
+            overflow: hidden; /* Блокируем скролл боди, скроллить будем только внутренности */
             color: #000;
         }
 
+        /* ЭМУЛЯЦИЯ ТЕЛЕФОНА */
         #mobile-wrapper {
             width: 100%;
-            max-width: 480px;
-            height: 100vh;
-            max-height: 100vh;
+            max-width: 480px; /* Ограничитель ширины */
+            height: 100vh;    /* Высота всегда 100% */
+            height: 100dvh;   /* Для мобильных браузеров */
             background-color: #fff;
             position: relative;
-            overflow: hidden;
+            overflow: hidden; /* Скрываем всё, что вылезает */
             display: flex;
             flex-direction: column;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5); /* Тень на ПК */
         }
+        
         .dark #mobile-wrapper { background-color: #000; }
 
-        .font-serif { font-family: 'Noto Serif', serif; }
-        .perspective-1000 { perspective: 1000px; }
-        .preserve-3d { transform-style: preserve-3d; }
-        .backface-hidden { backface-visibility: hidden; }
-        .rotate-y-180 { transform: rotateY(180deg); }
+        /* СКРОЛЛ КОНТЕЙНЕРЫ (Где можно листать) */
+        .scroll-container {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain; /* ВАЖНО: скролл не передается родительскому окну (Телеграму) */
+            flex: 1; /* Занимает всё доступное место */
+            position: relative;
+        }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        .safe-top-padding { padding-top: 20px; } 
+        /* НОВЫЙ БЕЗОПАСНЫЙ ОТСТУП СВЕРХУ */
+        /* Увеличил до 25px + safe area, чтобы не наезжало на крестик ТГ */
+        .header-safe-padding { 
+            padding-top: calc(env(safe-area-inset-top) + 25px); 
+            padding-bottom: 10px;
+        } 
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
@@ -72,7 +91,7 @@
             cursor: pointer;
         }
 
-        /* ЭКРАН ЗАГРУЗКИ / ОШИБОК */
+        /* ЭКРАН ОШИБОК */
         #auth-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 50; 
@@ -86,7 +105,8 @@
         /* ПРИЛОЖЕНИЕ */
         #app {
             width: 100%; height: 100%;
-            overflow: hidden; display: flex; flex-direction: column;
+            display: flex; flex-direction: column;
+            overflow: hidden; /* Важно, чтобы сам APP не скроллился */
         }
     </style>
    
@@ -154,7 +174,7 @@ window.onerror = function(msg, url, line, col, error) {
 };
 
 // =================================================================
-// 1. СТАРТ
+// 1. СТАРТ И НАСТРОЙКА ТЕЛЕГРАМА
 // =================================================================
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
@@ -164,7 +184,19 @@ let videoFinished = false;
 let accessError = null;     
 
 const tg = window.Telegram.WebApp;
-try { tg.expand(); tg.requestFullscreen(); } catch(e) {}
+
+// === ВАЖНЫЕ НАСТРОЙКИ ДЛЯ БЛОКИРОВКИ СВАЙПОВ ===
+try { 
+    tg.expand(); // Развернуть на полную высоту
+    
+    // Новая фишка ТГ: запрещает свайп вниз для закрытия (работает в новых версиях)
+    if (tg.isVerticalSwipesEnabled !== undefined) {
+        tg.isVerticalSwipesEnabled = false; 
+    }
+    
+    // Красим шапку телеграма в цвет фона (чтобы сливалась)
+    tg.setHeaderColor('#ffffff'); // По умолчанию белый
+} catch(e) {}
 
 async function userClickedStart() {
     const btn = document.getElementById('start-screen-btn');
@@ -400,12 +432,19 @@ function init() {
 
 function toggleTheme() {
     state.isDark = !state.isDark;
+    const wrapper = document.getElementById('mobile-wrapper');
+    const auth = document.getElementById('auth-screen');
+    
     if (state.isDark) {
         document.documentElement.classList.add('dark');
-        document.getElementById('mobile-wrapper').classList.add('dark');
+        wrapper.classList.add('dark');
+        auth.style.backgroundColor = '#000';
+        tg.setHeaderColor('#000000'); // Красим шапку ТГ в черный
     } else {
         document.documentElement.classList.remove('dark');
-        document.getElementById('mobile-wrapper').classList.remove('dark');
+        wrapper.classList.remove('dark');
+        auth.style.backgroundColor = '#fff';
+        tg.setHeaderColor('#ffffff'); // Красим шапку ТГ в белый
     }
     render();
 }
@@ -575,53 +614,57 @@ function goHome() {
 }
 
 // =================================================================
-// 5. ГЛАВНАЯ ФУНКЦИЯ RENDER (ВОТ ЕЁ НЕ БЫЛО)
+// 5. RENDER FUNCTIONS
 // =================================================================
 
 function render() {
     const app = document.getElementById('app');
     
-    // Скролл фильтра
+    // Запоминаем скролл
     let filterScrollPos = 0;
     const filterList = document.getElementById('topics-list');
     if(filterList) filterScrollPos = filterList.scrollTop;
 
-    // Сброс
     app.innerHTML = renderHeader();
     
+    // ГЛАВНЫЙ КОНТЕЙНЕР ДЛЯ СКРОЛЛА (scroll-container)
+    let contentHtml = '';
+
+    if (state.view === 'menu') {
+        contentHtml = renderMenu();
+    } else if (state.view === 'learn') {
+        contentHtml = renderLearn();
+    } else if (state.view === 'quiz' || state.view === 'mistakes') {
+        contentHtml = renderQuiz();
+    } else if (state.view === 'cards') {
+        contentHtml = renderCards();
+    }
+
+    // Вставляем контент
+    app.innerHTML += contentHtml;
+
+    // Добавляем модалку если есть
     if (state.showFilterModal) {
         app.innerHTML += renderFilterModal();
     }
-
-    if (state.view === 'menu') {
-        app.innerHTML += renderMenu();
-    } else if (state.view === 'learn') {
-        app.innerHTML += renderLearn();
-    } else if (state.view === 'quiz' || state.view === 'mistakes') {
-        app.innerHTML += renderQuiz();
-    } else if (state.view === 'cards') {
-        app.innerHTML += renderCards();
-        setTimeout(initCardEvents, 0);
-    }
     
+    // Инициализация карточек
+    if (state.view === 'cards') setTimeout(initCardEvents, 0);
+
     // Восстановление скролла
     if(state.showFilterModal) {
         const newFilterList = document.getElementById('topics-list');
         if(newFilterList) newFilterList.scrollTop = filterScrollPos;
     }
     
-    // Иконки
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-// =================================================================
-// 6. ВСПОМОГАТЕЛЬНЫЕ RENDERERS
-// =================================================================
-
 function renderHeader() {
     const isHome = state.view === 'menu';
+    // Добавлен класс header-safe-padding
     return `
-    <div class="bg-slate-50 dark:bg-black relative z-50 px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between h-[60px] transition-colors shadow-sm safe-top-padding box-content">
+    <div class="bg-slate-50 dark:bg-black relative z-50 px-4 flex items-center justify-between transition-colors shadow-sm header-safe-padding flex-shrink-0">
         <div class="flex items-center gap-3">
             ${!isHome ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
@@ -663,8 +706,8 @@ function renderFilterModal() {
     QUESTIONS_DATA.forEach(q => { topicCounts[q.topic] = (topicCounts[q.topic] || 0) + 1; });
 
     return `
-    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm safe-top-padding pb-4 h-full" onclick="if(event.target === this) toggleFilterModal(false)">
-        <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col max-h-[85vh]">
+    <div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm h-full" onclick="if(event.target === this) toggleFilterModal(false)">
+        <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col max-h-[85vh] mb-4">
             
             <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3>
@@ -688,7 +731,7 @@ function renderFilterModal() {
                 </div>
             </div>
 
-            <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 no-scrollbar">
+            <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 no-scrollbar" style="overscroll-behavior: contain;">
                 <button onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center">
                     <span>${allSelected ? 'Снять выделение' : 'Выбрать все'}</span>
                     <i data-lucide="${allSelected ? 'trash-2' : 'layers'}" class="w-4 h-4"></i>
@@ -720,8 +763,9 @@ function renderMenu() {
     const errors = Object.values(state.userProgress).filter(p => p.status === 'wrong').length;
     const allSelected = state.selectedTopics.length === availableTopics.length;
 
+    // Добавлен класс scroll-container
     return `
-    <div class="p-4 space-y-6 pb-20 max-w-md mx-auto animate-fade-in w-full">
+    <div class="scroll-container p-4 space-y-6 pb-20 w-full animate-fade-in">
         <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-8 text-white shadow-soft dark:shadow-none transition-colors relative overflow-hidden">
             <div class="relative z-10">
                 <h1 class="text-3xl font-black mb-2 tracking-tight">Физиология</h1>
@@ -811,24 +855,18 @@ function renderMenu() {
 
 function renderLearn() {
     const questions = getFilteredQuestions('learn');
+    // Добавлен flex и scroll-container
     return `
-    <div class="pb-20 min-h-screen pt-24 transition-all w-full">
+    <div class="flex flex-col h-full w-full">
         
-        <div id="learn-header" class="fixed top-0 left-0 w-full z-40 bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 shadow-sm transition-transform duration-300 px-4 py-3 flex justify-between items-center h-[70px] safe-top-padding box-content absolute-width">
-            <div class="flex items-center gap-3" onclick="goHome()">
-                <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
-                    <i data-lucide="chevron-left" class="w-7 h-7"></i>
-                </button>
-                <h2 class="font-black text-xl text-slate-900 dark:text-white font-sans">Конспект</h2>
-            </div>
-            
-            <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
+        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
+            <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="ml-auto flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
                 <i data-lucide="${state.hideAnswersInLearn ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>
                 ${state.hideAnswersInLearn ? 'Ответы' : 'Скрыть'}
             </button>
         </div>
 
-        <div class="p-4 space-y-6 max-w-2xl mx-auto font-sans mt-8 w-full">
+        <div class="scroll-container p-4 space-y-6 w-full">
             ${questions.map((q, idx) => `
                 <div class="border border-black dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-black shadow-sm">
                     <div class="bg-slate-100 dark:bg-slate-900 border-b border-black dark:border-slate-700 p-3 text-center flex justify-between items-start gap-4 px-4">
@@ -861,7 +899,7 @@ function renderLearn() {
                     </div>
                 </div>
             `).join('')}
-        </div>
+            <div class="h-20"></div> </div>
     </div>`;
 }
 
@@ -916,7 +954,7 @@ function renderQuiz() {
     }
 
     return `
-    <div class="flex flex-col h-full relative animate-fade-in pb-32 w-full">
+    <div class="flex flex-col h-full relative animate-fade-in w-full">
         
         <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
             <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
@@ -926,11 +964,11 @@ function renderQuiz() {
             <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
         </button>
 
-        <div class="h-1 w-full bg-slate-200 dark:bg-slate-800">
+        <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 flex-shrink-0">
             <div class="h-full bg-black dark:bg-white transition-all duration-300 ease-out" style="width: ${progressPct}%"></div>
         </div>
 
-        <div class="flex-1 p-4 px-14 max-w-xl mx-auto w-full overflow-y-auto no-scrollbar">
+        <div class="scroll-container p-4 px-14 max-w-xl mx-auto w-full">
             <div class="flex justify-between items-start mb-6 gap-4">
                 <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 leading-tight">${question.topic}</span>
                 <span class="text-xs font-black text-slate-300 dark:text-slate-600 whitespace-nowrap mt-1">${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}</span>
@@ -940,7 +978,7 @@ function renderQuiz() {
 
             <h3 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 mb-8 leading-snug">${question.question}</h3>
 
-            <div class="space-y-3">
+            <div class="space-y-3 pb-32">
                 ${question.options.map((opt, idx) => {
                     let btnStyle = "w-full p-5 rounded-2xl text-left font-semibold text-sm sm:text-base transition-all border relative ";
                     
@@ -1152,7 +1190,6 @@ function renderBlockScreen(title, message) {
                 </div>
                 <h1 class="text-2xl font-black text-slate-900 dark:text-white mb-2">${title}</h1>
                 <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-sm leading-relaxed">${message}</p>
-                ${title === 'Ошибка' || title === 'Ошибка сети' ? '<button onclick="location.reload()" class="bg-black text-white px-6 py-3 rounded-lg">Попробовать снова</button>' : ''}
             </div>
         `;
         lucide.createIcons();
@@ -1160,7 +1197,7 @@ function renderBlockScreen(title, message) {
 }
 
 // =================================================================
-// 9. ЗАПУСК ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+// 9. ЗАПУСК
 // =================================================================
 window.onload = function() {
     const startScreen = document.getElementById('start-screen-btn');
