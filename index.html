@@ -17,18 +17,18 @@
 
     <style>
         /* ГЛОБАЛЬНЫЙ СБРОС */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         html, body {
             overscroll-behavior: none;
-            touch-action: pan-x pan-y;
-            height: 100%;
-            height: 100dvh; /* ДИНАМИЧЕСКАЯ ВЫСОТА (FIX) */
+            touch-action: pan-y; /* Разрешаем только вертикальный скролл, горизонтальный ловим сами */
+            height: 100dvh; /* Фикс высоты для мобилок */
             width: 100%;
             background-color: #000;
             color: #000;
             font-family: 'Inter', sans-serif;
             -webkit-tap-highlight-color: transparent;
             overflow: hidden;
-            margin: 0; padding: 0;
         }
 
         #mobile-wrapper {
@@ -45,10 +45,11 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* HEADER: МИНИМАЛЬНЫЙ ОТСТУП ПОД КНОПКИ ТГ */
+        /* HEADER: БОЛЬШОЙ ОТСТУП ПОД КНОПКИ ТЕЛЕГРАМА */
         .safe-header {
-            padding-top: calc(env(safe-area-inset-top) + 10px); 
-            padding-bottom: 10px;
+            /* 44px (высота навбара) + безопасная зона + 10px воздух */
+            padding-top: calc(env(safe-area-inset-top) + 44px); 
+            padding-bottom: 12px;
             padding-left: 16px;
             padding-right: 16px;
             width: 100%;
@@ -58,8 +59,9 @@
             align-items: center;
             justify-content: space-between;
             flex-shrink: 0;
-            min-height: 60px; /* Фиксируем высоту шапки */
+            border-bottom: 1px solid rgba(0,0,0,0.05);
         }
+        .dark .safe-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
         /* 3D КАРТОЧКИ */
         .perspective-1000 { perspective: 1000px; }
@@ -72,8 +74,8 @@
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
-            touch-action: pan-y;
             flex: 1; /* Занимает всё свободное место */
+            padding-bottom: 20px;
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -84,9 +86,11 @@
             padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
             background-color: inherit;
             z-index: 40;
-            flex-shrink: 0; /* Не сжимать */
+            flex-shrink: 0;
             width: 100%;
+            border-top: 1px solid rgba(0,0,0,0.05);
         }
+        .dark .bottom-panel { border-top: 1px solid rgba(255,255,255,0.1); }
 
         /* АНИМАЦИИ */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -159,7 +163,7 @@
 <script>
 
 // =================================================================
-// 1. СТАРТ
+// 1. СТАРТ И ЖЕСТЫ
 // =================================================================
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec"; 
@@ -172,15 +176,40 @@ const tg = window.Telegram.WebApp;
 
 try { 
     tg.expand(); 
-    tg.requestFullscreen(); 
+    tg.requestFullscreen(); // Во весь экран
+    // Запрет закрытия свайпом
     if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
-    tg.setHeaderColor('#ffffff'); 
+    tg.setHeaderColor('#ffffff'); // Красим системную шапку
 } catch(e) {}
 
-// КНОПКА НАЗАД
-tg.BackButton.onClick(function() {
-    goHome();
-});
+// === РЕАЛИЗАЦИЯ СВАЙПА "НАЗАД" (Левый край -> Вправо) ===
+document.addEventListener('touchstart', (e) => {
+    // Начинаем отслеживать, только если коснулись левого края (первые 40px)
+    if (e.touches[0].clientX < 40) {
+        window.swipeBackStartX = e.touches[0].clientX;
+        window.swipeBackStartY = e.touches[0].clientY;
+        window.isSwipingBack = true;
+    } else {
+        window.isSwipingBack = false;
+    }
+}, {passive: true});
+
+document.addEventListener('touchend', (e) => {
+    if (!window.isSwipingBack) return;
+    
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    
+    const diffX = endX - window.swipeBackStartX;
+    const diffY = Math.abs(endY - window.swipeBackStartY);
+
+    // Если свайпнули вправо больше чем на 60px и почти горизонтально
+    if (diffX > 60 && diffY < 50) {
+        goHome();
+    }
+    window.isSwipingBack = false;
+}, {passive: true});
+
 
 async function userClickedStart() {
     const btn = document.getElementById('start-screen-btn');
@@ -361,7 +390,7 @@ function processQuestions() {
 }
 
 // =================================================================
-// 3. STATE
+// 3. STATE & LOGIC
 // =================================================================
         
 const state = {
@@ -436,7 +465,6 @@ function getFilteredQuestions(viewMode) {
 function startMode(mode, isResume = false) {
     if (isResume && state.resumeState && state.resumeState.mode === mode) {
         state.view = mode;
-        updateBackButton();
         render();
         return;
     }
@@ -456,8 +484,6 @@ function startMode(mode, isResume = false) {
     state.sessionAnswers = {};
     state.resumeState = null;
     resetQuestionState();
-    
-    updateBackButton();
     render();
 }
 
@@ -547,16 +573,7 @@ function goHome() {
         }
     }
     state.view = 'menu';
-    updateBackButton(); 
     render();
-}
-
-function updateBackButton() {
-    if (state.view === 'menu') {
-        tg.BackButton.hide();
-    } else {
-        tg.BackButton.show();
-    }
 }
 
 // =================================================================
@@ -565,13 +582,11 @@ function updateBackButton() {
 
 function render() {
     const app = document.getElementById('app');
-    let filterScrollPos = 0;
-    const filterList = document.getElementById('topics-list');
-    if(filterList) filterScrollPos = filterList.scrollTop;
     
-    let appScrollPos = 0;
-    const appScroll = document.querySelector('.scroll-y-auto');
-    if(appScroll) appScrollPos = appScroll.scrollTop;
+    // СОХРАНЕНИЕ СКРОЛЛА
+    let savedScroll = 0;
+    const scrollContainer = document.querySelector('.scroll-y-auto');
+    if (scrollContainer) savedScroll = scrollContainer.scrollTop;
 
     app.innerHTML = renderHeader();
     
@@ -587,13 +602,12 @@ function render() {
     
     if (state.view === 'cards') setTimeout(initCardEvents, 0);
 
-    const newAppScroll = document.querySelector('.scroll-y-auto');
-    if(newAppScroll && appScrollPos > 0) newAppScroll.scrollTop = appScrollPos;
-
-    if(state.showFilterModal) {
-        const newFilterList = document.getElementById('topics-list');
-        if(newFilterList) newFilterList.scrollTop = filterScrollPos;
+    // ВОССТАНОВЛЕНИЕ СКРОЛЛА
+    const newScrollContainer = document.querySelector('.scroll-y-auto');
+    if(newScrollContainer && savedScroll > 0) {
+        newScrollContainer.scrollTop = savedScroll;
     }
+    
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
@@ -694,7 +708,7 @@ function renderMenu() {
     const allSelected = state.selectedTopics.length === availableTopics.length;
 
     return `
-    <div class="scroll-y-auto p-4 space-y-6 pb-20 w-full animate-fade-in flex-1">
+    <div class="scroll-y-auto p-4 space-y-6 w-full animate-fade-in flex-1">
         <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-8 text-white shadow-soft dark:shadow-none transition-colors relative overflow-hidden">
             <div class="relative z-10">
                 <h1 class="text-3xl font-black mb-2 tracking-tight">Физиология</h1>
@@ -785,7 +799,7 @@ function renderLearn() {
     const questions = getFilteredQuestions('learn');
     return `
     <div class="flex flex-col h-full w-full">
-        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 safe-header">
+        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-3" onclick="goHome()">
                 <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
                     <i data-lucide="chevron-left" class="w-7 h-7"></i>
@@ -885,7 +899,16 @@ function renderQuiz() {
 
     return `
     <div class="flex flex-col h-full relative animate-fade-in w-full">
-        <div class="safe-header"></div> <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 flex-shrink-0">
+        
+        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
+            <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
+        </button>
+
+        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90">
+            <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
+        </button>
+
+        <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 flex-shrink-0">
             <div class="h-full bg-black dark:bg-white transition-all duration-300 ease-out" style="width: ${progressPct}%"></div>
         </div>
 
@@ -917,14 +940,6 @@ function renderQuiz() {
                 }).join('')}
             </div>
         </div>
-
-        <button onclick="prevQuestion()" ${state.currentQuestionIndex === 0 ? 'disabled' : ''} class="fixed left-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all ${state.currentQuestionIndex === 0 ? 'opacity-0 pointer-events-none' : 'hover:scale-110 active:scale-90'}">
-            <i data-lucide="chevron-left" class="w-6 h-6 text-slate-900 dark:text-white"></i>
-        </button>
-
-        <button onclick="nextQuestion()" class="fixed right-2 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-black/80 backdrop-blur shadow-lg border border-slate-100 dark:border-slate-800 transition-all hover:scale-110 active:scale-90">
-            <i data-lucide="chevron-right" class="w-6 h-6 text-slate-900 dark:text-white"></i>
-        </button>
 
         <div class="bottom-panel bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
             <div class="max-w-xl mx-auto">
@@ -1040,16 +1055,17 @@ function renderCards() {
 
     const question = state.playableQuestions[state.currentQuestionIndex];
     const imageBlock = question.image ? `
-        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700 flex-shrink-0">
+        <div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0">
             <img src="${question.image}" class="w-full h-full object-contain" alt="Card Image">
         </div>
     ` : '';
     const correctText = question.correctIndices.map(idx => question.options[idx]).join('<br><br>');
 
+    // КАРТОЧКА: КОНТЕНТ СВЕРХУ (justify-start)
     return `
-    <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full" style="padding-top: 0 !important;">
+    <div class="h-full flex flex-col p-4 overflow-hidden transition-colors select-none w-full">
             
-            <div class="safe-header"></div> <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">
+            <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">
                 ${state.currentQuestionIndex + 1} / ${state.playableQuestions.length}
             </div>
 
@@ -1062,7 +1078,7 @@ function renderCards() {
                                 <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${question.topic}</div>
                             </div>
                             
-                            <div class="w-full flex flex-col gap-4 flex-1">
+                            <div class="w-full flex flex-col gap-4 flex-1 overflow-y-auto no-scrollbar justify-start">
                                 ${imageBlock}
                                 <h3 class="text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${question.question}</h3>
                                 <div class="w-full space-y-2">
@@ -1083,7 +1099,7 @@ function renderCards() {
 
                         <div class="absolute inset-0 backface-hidden bg-black dark:bg-white p-8 flex flex-col items-center justify-center text-center text-white dark:text-black rounded-[2rem] shadow-2xl rotate-y-180">
                             <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4">Правильный ответ</h3>
-                            <div class="flex-1 flex flex-col items-center justify-center w-full overflow-hidden">
+                            <div class="flex-1 flex flex-col items-center justify-center w-full overflow-y-auto no-scrollbar">
                                 <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-blue-600 select-none leading-snug">
                                     ${correctText}
                                 </div>
