@@ -508,6 +508,7 @@ function toggleTopic(topic) {
 }
 
 function toggleSelectAllTopics() {
+    haptic('medium');
     if (state.selectedTopics.length === availableTopics.length) state.selectedTopics = [];
     else state.selectedTopics = [...availableTopics];
     render();
