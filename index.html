@@ -33,28 +33,20 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ХЕДЕР (УМНЫЙ ОТСТУП) --- */
+        /* --- ХЕДЕР: ГАРАНТИРОВАННЫЙ ОТСТУП ОТ КНОПОК ТГ --- */
         .layout-header {
             flex-shrink: 0; width: 100%;
-            /* Отступ равен системному бару */
-            padding-top: env(safe-area-inset-top); 
+            /* ДОБАВИЛ + 40px К СИСТЕМНОМУ ОТСТУПУ */
+            padding-top: calc(env(safe-area-inset-top) + 40px);
+            padding-bottom: 12px;
+            padding-left: 16px; padding-right: 16px;
             background-color: inherit; z-index: 50;
             display: flex; align-items: center; justify-content: space-between;
-            /* Высота контента хедера */
-            height: calc(env(safe-area-inset-top) + 54px); 
-            padding-bottom: 6px; /* Небольшой отступ снизу */
-            padding-left: 16px; padding-right: 16px;
             border-bottom: 1px solid rgba(0,0,0,0.05);
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* Элементы внутри хедера выравниваем по низу (ближе к контенту, дальше от кнопок ТГ) */
-        .header-inner {
-            width: 100%; height: 100%;
-            display: flex; align-items: flex-end; justify-content: space-between;
-        }
-
-        /* --- КОНТЕНТ --- */
+        /* КОНТЕНТ */
         .layout-content {
             flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
@@ -62,7 +54,7 @@
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
-        /* --- ПОДВАЛ --- */
+        /* ПОДВАЛ */
         .layout-footer {
             position: absolute; bottom: 0; left: 0; width: 100%;
             padding: 12px 16px; 
@@ -73,13 +65,12 @@
         }
         .dark .layout-footer { border-top: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КАРТОЧКИ (FIX IOS) --- */
+        /* КАРТОЧКИ (FIX IOS) */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { 
             -webkit-backface-visibility: hidden; 
             backface-visibility: hidden; 
-            /* Фикс мерцания на iOS */
             transform: translate3d(0,0,0); 
         }
         .rotate-y-180 { transform: rotateY(180deg); }
@@ -151,11 +142,9 @@ function haptic(type='light') {
     } else if(navigator.vibrate) navigator.vibrate(10);
 }
 
-// Свайп "назад" (Глобальный)
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
 document.addEventListener('touchend', (e)=>{if(!window.sw)return;const ex=e.changedTouches[0].clientX;const ey=e.changedTouches[0].clientY;if((ex-window.sx)>60 && Math.abs(ey-window.sy)<50){haptic('medium');goHome();}window.sw=false},{passive:true});
 
-// СТАРТ
 async function userClickedStart() {
     haptic('medium'); 
     const txt = document.getElementById('start-text'); if(txt) txt.remove();
@@ -365,51 +354,51 @@ function render() {
     lucide.createIcons();
 }
 
+// ХЕДЕР - УВЕЛИЧЕННЫЙ ОТСТУП СВЕРХУ, ЛОГО СЛЕВА, КНОПКИ СПРАВА
 function renderHeader() {
     const isHome=state.view==='menu';
     return `<div class="layout-header bg-slate-50 dark:bg-black shadow-sm">
-        <div class="header-inner">
-            <div class="flex items-center gap-3 mb-1">
-                ${!isHome?`<button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white btn-click"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>`:''}
-                <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group btn-click">
-                    <div class="transition-transform group-hover:scale-105"><img src="${state.isDark?"https://i.ibb.co/tw2sGMTs/image.png":"https://i.ibb.co/zWn4xWnk/image.png"}" class="w-8 h-8 object-contain rounded-lg shadow-sm"></div>
-                    <span class="font-bold text-lg text-black dark:text-white flex items-baseline"><span class="font-serif mr-[1px]">I</span>med</span>
-                </div>
+        <div class="flex items-center gap-3">
+            ${!isHome?`<button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white btn-click"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>`:''}
+            <div onclick="goHome()" class="flex items-center gap-2 cursor-pointer group btn-click">
+                <div class="transition-transform group-hover:scale-105"><img src="${state.isDark?"https://i.ibb.co/tw2sGMTs/image.png":"https://i.ibb.co/zWn4xWnk/image.png"}" class="w-8 h-8 object-contain rounded-lg shadow-sm"></div>
+                <span class="font-bold text-lg text-black dark:text-white flex items-baseline"><span class="font-serif mr-[1px]">I</span>med</span>
             </div>
-            <div class="flex items-center gap-2 mb-1">
-                <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="rotate-cw" class="w-5 h-5"></i></button>
-                <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="${state.isDark?'sun':'moon'}" class="w-6 h-6"></i></button>
-                <a href="https://t.me/stewonly" target="_blank" class="p-2 text-slate-500 hover:text-[#2AABEE] dark:text-slate-400 dark:hover:text-[#2AABEE] btn-click"><i data-lucide="send" class="w-5 h-5"></i></a>
-            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="window.location.reload()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="rotate-cw" class="w-5 h-5"></i></button>
+            <button onclick="toggleTheme()" class="p-2 text-slate-500 hover:text-black dark:text-slate-400 dark:hover:text-white btn-click"><i data-lucide="${state.isDark?'sun':'moon'}" class="w-6 h-6"></i></button>
+            <a href="https://t.me/stewonly" target="_blank" class="p-2 text-slate-500 hover:text-[#2AABEE] dark:text-slate-400 dark:hover:text-[#2AABEE] btn-click"><i data-lucide="send" class="w-5 h-5"></i></a>
         </div>
     </div>`;
 }
 
+// МЕНЮ - СДЕЛАНО КОМПАКТНЕЕ
 function renderMenuContent() {
     const learned=Object.values(state.userProgress).filter(p=>p.status==='correct').length;
     const errors=Object.values(state.userProgress).filter(p=>p.status==='wrong').length;
     const allSel=state.selectedTopics.length===availableTopics.length;
-    return `<div class="p-4 space-y-5 animate-fade-in pb-10">
+    return `<div class="p-4 space-y-4 animate-fade-in pb-10">
         <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-6 text-white shadow-soft dark:shadow-none relative overflow-hidden">
             <div class="relative z-10">
                 <h1 class="text-2xl font-black mb-1 tracking-tight">Физиология</h1>
-                <p class="text-slate-400 font-medium text-xs mb-6">База: ${QUESTIONS_DATA.length} вопросов</p>
+                <p class="text-slate-400 font-medium text-xs mb-4">База: ${QUESTIONS_DATA.length} вопросов</p>
                 <button onclick="toggleFilterModal(true)" class="flex items-center gap-2 text-[10px] font-bold bg-white/10 hover:bg-white/20 active:scale-95 w-fit px-4 py-2 rounded-xl border border-white/10 btn-click"><i data-lucide="filter" class="w-3 h-3 text-white"></i><span>${allSel?'Все темы':`${state.selectedTopics.length} выбрано`}</span></button>
             </div>
             <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
         </div>
-        ${state.resumeState ? `<button onclick="startMode('${state.resumeState.mode}', true)" class="w-full bg-indigo-600 text-white p-5 rounded-[2rem] shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between group active:scale-[0.98] animate-slide-up btn-click"><div class="flex items-center gap-4"><div class="bg-white/20 p-3 rounded-2xl"><i data-lucide="play-circle" class="w-6 h-6 text-white"></i></div><div class="text-left"><span class="block font-black text-lg">Продолжить</span><span class="text-indigo-100 text-xs font-bold uppercase tracking-wide">${state.resumeState.mode==='quiz'?'Тест':(state.resumeState.mode==='cards'?'Карточки':'Ошибки')} • Вопрос ${state.resumeState.index+1}</span></div></div><i data-lucide="chevron-right" class="w-5 h-5"></i></button>`:''}
+        ${state.resumeState ? `<button onclick="startMode('${state.resumeState.mode}', true)" class="w-full bg-indigo-600 text-white p-4 rounded-[2rem] shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between group active:scale-[0.98] animate-slide-up btn-click"><div class="flex items-center gap-3"><div class="bg-white/20 p-2 rounded-xl"><i data-lucide="play-circle" class="w-6 h-6 text-white"></i></div><div class="text-left"><span class="block font-black text-base">Продолжить</span><span class="text-indigo-100 text-[10px] font-bold uppercase tracking-wide">${state.resumeState.mode==='quiz'?'Тест':(state.resumeState.mode==='cards'?'Карточки':'Ошибки')} • Вопрос ${state.resumeState.index+1}</span></div></div><i data-lucide="chevron-right" class="w-5 h-5"></i></button>`:''}
         <div class="space-y-3">
-            <button onclick="startMode('learn')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex justify-between items-center group active:scale-[0.98] btn-click"><div class="flex items-center gap-5"><div class="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-2xl text-yellow-700 dark:text-yellow-400"><i data-lucide="book-open" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-lg">Конспект</span><span class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">Учить вопросы</span></div></div><i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i></button>
-            <button onclick="startMode('quiz')" class="w-full bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex justify-between items-center group active:scale-[0.98] btn-click"><div class="flex items-center gap-5"><div class="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-2xl text-blue-700 dark:text-blue-400"><i data-lucide="flask-conical" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-lg">Тест</span><span class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase">Проверить знания</span></div></div><i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i></button>
+            <button onclick="startMode('learn')" class="w-full bg-white dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex justify-between items-center group active:scale-[0.98] btn-click"><div class="flex items-center gap-4"><div class="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-2xl text-yellow-700 dark:text-yellow-400"><i data-lucide="book-open" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-base">Конспект</span><span class="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase">Учить вопросы</span></div></div><i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i></button>
+            <button onclick="startMode('quiz')" class="w-full bg-white dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex justify-between items-center group active:scale-[0.98] btn-click"><div class="flex items-center gap-4"><div class="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-2xl text-blue-700 dark:text-blue-400"><i data-lucide="flask-conical" class="w-6 h-6"></i></div><div class="text-left"><span class="block font-black text-slate-900 dark:text-white text-base">Тест</span><span class="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase">Проверить знания</span></div></div><i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 dark:text-slate-600"></i></button>
             <div class="grid grid-cols-2 gap-3">
-                <button onclick="startMode('cards')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click"><div class="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-2xl text-emerald-700 dark:text-emerald-400"><i data-lucide="brain" class="w-6 h-6"></i></div><span class="font-bold text-slate-900 dark:text-white text-sm">Карточки</span></button>
-                <button onclick="startMode('mistakes')" class="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex flex-col items-center justify-center gap-4 active:scale-[0.98] btn-click"><div class="bg-rose-100 dark:bg-rose-900/30 p-3 rounded-2xl text-rose-700 dark:text-rose-400"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><span class="font-bold text-slate-900 dark:text-white text-sm">Ошибки</span></button>
+                <button onclick="startMode('cards')" class="bg-white dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex flex-col items-center justify-center gap-3 active:scale-[0.98] btn-click"><div class="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-2xl text-emerald-700 dark:text-emerald-400"><i data-lucide="brain" class="w-6 h-6"></i></div><span class="font-bold text-slate-900 dark:text-white text-xs">Карточки</span></button>
+                <button onclick="startMode('mistakes')" class="bg-white dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-soft hover:shadow-lg flex flex-col items-center justify-center gap-3 active:scale-[0.98] btn-click"><div class="bg-rose-100 dark:bg-rose-900/30 p-3 rounded-2xl text-rose-700 dark:text-rose-400"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><span class="font-bold text-slate-900 dark:text-white text-xs">Ошибки</span></button>
             </div>
         </div>
         <div class="grid grid-cols-2 gap-3 pt-1">
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-3xl font-black text-slate-900 dark:text-white">${learned}</span><span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Выучено</span></div>
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-3xl font-black text-slate-900 dark:text-white">${errors}</span><span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ошибок</span></div>
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-2xl font-black text-slate-900 dark:text-white">${learned}</span><span class="text-[9px] font-bold uppercase tracking-widest text-slate-400">Выучено</span></div>
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-2xl font-black text-slate-900 dark:text-white">${errors}</span><span class="text-[9px] font-bold uppercase tracking-widest text-slate-400">Ошибок</span></div>
         </div>
     </div>`;
 }
@@ -480,9 +469,7 @@ function renderQuizFinished() {
     </div>`;
 }
 
-// -----------------------------------------------------------
-// ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ ЛОГИКА КАРТОЧЕК
-// -----------------------------------------------------------
+// ЛОГИКА КАРТОЧЕК
 function renderCardsContent() {
     if(!state.playableQuestions.length) return renderQuizFinished();
     const q=state.playableQuestions[state.currentQuestionIndex];
@@ -524,105 +511,6 @@ function renderCardsFooter() {
     </div>`;
 }
 
-// УПРОЩЕННАЯ ЛОГИКА СВАЙПОВ И КЛИКОВ
-function initCardEvents() {
-    const card = document.getElementById('flashcard');
-    if (!card) return;
-
-    let startX = 0;
-    let isSwiping = false;
-
-    // Сброс трансформации
-    card.style.transform = 'translateX(0px) rotate(0deg)';
-    card.style.transition = 'transform 0.3s ease-out';
-
-    // Touch Start
-    card.ontouchstart = (e) => {
-        if (state.animState !== 'idle') return;
-        startX = e.touches[0].clientX;
-        isSwiping = false; // Сбрасываем флаг свайпа
-        card.style.transition = 'none'; // Убираем анимацию для драга
-    };
-
-    // Touch Move
-    card.ontouchmove = (e) => {
-        if (state.animState !== 'idle') return;
-        const currentX = e.touches[0].clientX;
-        const diff = currentX - startX;
-
-        // Если сдвиг > 10px, считаем это свайпом
-        if (Math.abs(diff) > 10) {
-            isSwiping = true;
-            state.swipeX = diff;
-            card.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg)`;
-        }
-    };
-
-    // Touch End
-    card.ontouchend = (e) => {
-        if (state.animState !== 'idle') return;
-
-        if (isSwiping) {
-            // Если был свайп -> проверяем порог
-            if (Math.abs(state.swipeX) > 100) {
-                animateCard(state.swipeX > 0 ? 'prev' : 'next');
-            } else {
-                // Возврат на место
-                card.style.transition = 'transform 0.3s ease-out';
-                card.style.transform = 'translateX(0px) rotate(0deg)';
-            }
-        } 
-        // Если свайпа НЕ было (isSwiping === false) -> сработает событие onclick на div
-    };
-}
-
-// Обработчик клика (срабатывает, только если не было свайпа)
-function handleCardClick() {
-    if (state.animState === 'idle') {
-        toggleFlip();
-    }
-}
-
-function animateCard(dir) {
-    const card = document.getElementById('flashcard');
-    if ((dir === 'next' && state.currentQuestionIndex >= state.playableQuestions.length - 1) || 
-        (dir === 'prev' && state.currentQuestionIndex <= 0)) {
-        card.style.transition = 'transform 0.3s ease-out';
-        card.style.transform = 'translateX(0) rotate(0deg)';
-        return;
-    }
-
-    state.animState = 'animating';
-    card.style.transition = 'transform 0.2s ease-in, opacity 0.2s ease-in';
-    card.style.transform = dir === 'next' ? 'translateX(-120vw) rotate(-20deg)' : 'translateX(120vw) rotate(20deg)';
-    card.style.opacity = '0';
-    
-    setTimeout(() => {
-        if (dir === 'next') state.currentQuestionIndex++; else state.currentQuestionIndex--;
-        state.isFlipped = false; state.swipeX = 0;
-        render(); 
-        const newCard = document.getElementById('flashcard');
-        newCard.style.transition = 'none';
-        newCard.style.transform = dir === 'next' ? 'translateX(120vw) rotate(20deg)' : 'translateX(-120vw) rotate(-20deg)';
-        newCard.style.opacity = '0';
-        requestAnimationFrame(() => {
-            newCard.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
-            newCard.style.transform = 'translateX(0) rotate(0deg)';
-            newCard.style.opacity = '1';
-            setTimeout(() => { state.animState = 'idle'; }, 300);
-        });
-    }, 200);
-}
-
-function toggleFlip() {
-    state.isFlipped = !state.isFlipped;
-    const inner = document.getElementById('card-inner');
-    if (inner) {
-        if (state.isFlipped) inner.classList.add('rotate-y-180');
-        else inner.classList.remove('rotate-y-180');
-    }
-}
-
 function renderFilterModal() {
     if(!state.showFilterModal) return '';
     const allSel=state.selectedTopics.length===availableTopics.length;
@@ -640,19 +528,76 @@ function renderFilterModal() {
     </div>`;
 }
 
-function renderBlockScreen(title, message) {
-    const authScreen = document.getElementById('auth-screen');
-    if (authScreen) {
-        authScreen.classList.remove('hidden-force');
-        authScreen.innerHTML = `<div class="flex flex-col items-center justify-center h-full p-6 text-center animate-fade-in"><div class="bg-rose-100 dark:bg-rose-900/30 p-4 rounded-full mb-6"><i data-lucide="lock" class="w-12 h-12 text-rose-600 dark:text-rose-400"></i></div><h1 class="text-2xl font-black text-slate-900 dark:text-white mb-2">${title}</h1><p class="text-slate-500 dark:text-slate-400 mb-8 max-w-sm leading-relaxed">${message}</p></div>`;
-        lucide.createIcons();
-    }
+function initCardEvents() {
+    const card = document.getElementById('flashcard');
+    if (!card) return;
+    let startX = 0;
+    let isSwiping = false;
+
+    card.style.transform = 'translateX(0px) rotate(0deg)';
+    card.style.transition = 'transform 0.3s ease-out';
+
+    card.ontouchstart = (e) => {
+        if (state.animState !== 'idle') return;
+        startX = e.touches[0].clientX;
+        isSwiping = false;
+        card.style.transition = 'none';
+    };
+
+    card.ontouchmove = (e) => {
+        if (state.animState !== 'idle') return;
+        const currentX = e.touches[0].clientX;
+        const diff = currentX - startX;
+        if (Math.abs(diff) > 10) {
+            isSwiping = true;
+            state.swipeX = diff;
+            card.style.transform = `translateX(${diff}px) rotate(${diff * 0.05}deg)`;
+        }
+    };
+
+    card.ontouchend = (e) => {
+        if (state.animState !== 'idle') return;
+        if (isSwiping) {
+            if (Math.abs(state.swipeX) > 100) animateCard(state.swipeX > 0 ? 'prev' : 'next');
+            else { card.style.transition = 'transform 0.3s ease-out'; card.style.transform = 'translateX(0px) rotate(0deg)'; }
+        }
+    };
 }
 
-window.onload = function() {
-    const startScreen = document.getElementById('start-screen-btn');
-    if(startScreen) startScreen.style.display = 'flex';
-};
+function handleCardClick() { if (state.animState === 'idle') toggleFlip(); }
+
+function animateCard(dir) {
+    const card = document.getElementById('flashcard');
+    if ((dir === 'next' && state.currentQuestionIndex >= state.playableQuestions.length - 1) || (dir === 'prev' && state.currentQuestionIndex <= 0)) {
+        card.style.transition = 'transform 0.3s ease-out'; card.style.transform = 'translateX(0) rotate(0deg)'; return;
+    }
+    state.animState = 'animating';
+    card.style.transition = 'transform 0.2s ease-in, opacity 0.2s ease-in';
+    card.style.transform = dir === 'next' ? 'translateX(-120vw) rotate(-20deg)' : 'translateX(120vw) rotate(20deg)';
+    card.style.opacity = '0';
+    setTimeout(() => {
+        if (dir === 'next') state.currentQuestionIndex++; else state.currentQuestionIndex--;
+        state.isFlipped = false; state.swipeX = 0; render(); 
+        const newCard = document.getElementById('flashcard');
+        newCard.style.transition = 'none';
+        newCard.style.transform = dir === 'next' ? 'translateX(120vw) rotate(20deg)' : 'translateX(-120vw) rotate(-20deg)';
+        newCard.style.opacity = '0';
+        requestAnimationFrame(() => {
+            newCard.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
+            newCard.style.transform = 'translateX(0) rotate(0deg)';
+            newCard.style.opacity = '1';
+            setTimeout(() => { state.animState = 'idle'; }, 300);
+        });
+    }, 200);
+}
+
+function toggleFlip() {
+    state.isFlipped = !state.isFlipped;
+    const inner = document.getElementById('card-inner');
+    if (inner) { if (state.isFlipped) inner.classList.add('rotate-y-180'); else inner.classList.remove('rotate-y-180'); }
+}
+
+window.onload = function() { const startScreen = document.getElementById('start-screen-btn'); if(startScreen) startScreen.style.display = 'flex'; };
 </script>
 </body>
 </html>
