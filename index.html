@@ -45,10 +45,10 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ИСПРАВЛЕНИЕ ШАПКИ (ОПУСТИЛ ЕЩЕ НИЖЕ) --- */
+        /* --- HEADER: ОПУСТИЛ ЕЩЕ НИЖЕ (ФИКС "5 ММ") --- */
         .safe-header {
-            /* Было 12px, стало 50px. Это опустит твои кнопки ниже системных кнопок Телеграма */
-            padding-top: calc(env(safe-area-inset-top) + 50px); 
+            /* Было 44px, поставил 70px. Это опустит шапку ниже кнопок "Закрыть/Меню" */
+            padding-top: calc(env(safe-area-inset-top) + 70px); 
             padding-bottom: 12px;
             padding-left: 16px;
             padding-right: 16px;
@@ -69,29 +69,34 @@
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
 
-        /* СКРОЛЛ */
+        /* --- СКРОЛЛ: БОЛЬШОЙ ОТСТУП СНИЗУ --- */
         .scroll-y-auto {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             flex: 1;
             width: 100%;
-            /* Отступ снизу 200px, чтобы текст вылезал из-под кнопки */
-            padding-bottom: 200px !important; 
+            /* 220px отступа, чтобы текст вылезал из-под кнопки даже на маленьких экранах */
+            padding-bottom: 220px !important; 
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* НИЖНЯЯ ПАНЕЛЬ */
+        /* --- НИЖНЯЯ ПАНЕЛЬ: ФИКСИРОВАННАЯ --- */
         .bottom-panel {
-            position: absolute;
+            position: fixed; /* Приклеена к экрану */
             bottom: 0;
             left: 0;
             width: 100%;
+            max-width: 480px; /* Чтобы на компе не разъезжалась */
+            /* Центрируем на десктопе, если ширина больше 480 */
+            left: 50%;
+            transform: translateX(-50%);
+            
             padding: 16px;
             padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
             background-color: inherit;
-            z-index: 100;
+            z-index: 9999; /* Поверх всего */
             border-top: 1px solid rgba(0,0,0,0.05);
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
@@ -258,6 +263,7 @@ async function performAccessCheck() {
     const urlParams = new URLSearchParams(window.location.search);
     const userId = tgUserId || urlParams.get('userId');
 
+    // Локальный тест
     if (window.location.protocol === 'file:') {
         accessData = { allowed: true };
         processQuestions();
