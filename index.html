@@ -45,10 +45,10 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER: ПОДНЯЛ ИНТЕРФЕЙС ВЫШЕ --- */
+        /* --- HEADER: МАКСИМАЛЬНО ВЫСОКО --- */
         .safe-header {
-            /* Было + 70px, стало + 10px. Это уберет лишнюю дырку сверху */
-            padding-top: calc(env(safe-area-inset-top) + 10px); 
+            /* Убрали +10px. Теперь только системный отступ (челка/статусбар) */
+            padding-top: env(safe-area-inset-top); 
             padding-bottom: 12px;
             padding-left: 16px;
             padding-right: 16px;
@@ -60,6 +60,8 @@
             justify-content: space-between;
             flex-shrink: 0;
             border-bottom: 1px solid rgba(0,0,0,0.05);
+            /* Минимальная высота, чтобы кнопки были кликабельны */
+            min-height: calc(env(safe-area-inset-top) + 50px);
         }
         .dark .safe-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
@@ -81,17 +83,15 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* --- НИЖНЯЯ ПАНЕЛЬ (Центровка сохранена) --- */
+        /* --- НИЖНЯЯ ПАНЕЛЬ --- */
         .bottom-panel {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             margin: 0 auto;
-            
             width: 100%;
             max-width: 480px;
-            
             padding: 16px;
             padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
             background-color: inherit;
