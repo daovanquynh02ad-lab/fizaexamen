@@ -16,61 +16,60 @@
     <script src="questions.js"></script>
 
     <style>
-        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ ДЛЯ БЛОКИРОВКИ СВАЙПОВ ТЕЛЕГРАМА */
+        /* ГЛОБАЛЬНЫЕ НАСТРОЙКИ */
         html {
-            overscroll-behavior: none; /* Запрещает "резиновый" эффект всей страницы */
+            overscroll-behavior: none; 
         }
         
         body {
             font-family: 'Inter', sans-serif;
             -webkit-tap-highlight-color: transparent;
-            background-color: #000; /* Фон вокруг телефона на ПК */
+            background-color: #000; /* Черный фон вокруг на ПК */
             margin: 0;
             padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center; /* Центрируем по вертикали на ПК */
+            align-items: center;
             min-height: 100vh;
             width: 100vw;
-            overflow: hidden; /* Блокируем скролл боди, скроллить будем только внутренности */
+            overflow: hidden;
             color: #000;
         }
 
         /* ЭМУЛЯЦИЯ ТЕЛЕФОНА */
         #mobile-wrapper {
             width: 100%;
-            max-width: 480px; /* Ограничитель ширины */
-            height: 100vh;    /* Высота всегда 100% */
-            height: 100dvh;   /* Для мобильных браузеров */
-            background-color: #fff;
+            max-width: 480px; /* На ПК ширина телефона */
+            height: 100vh;    
+            height: 100dvh;   
+            background-color: #fff; /* Белый фон по умолчанию */
             position: relative;
-            overflow: hidden; /* Скрываем всё, что вылезает */
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            box-shadow: 0 0 50px rgba(0,0,0,0.5); /* Тень на ПК */
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
         }
         
+        /* На мобилке убираем тень и ограничение ширины */
+        @media (max-width: 480px) {
+            #mobile-wrapper { max-width: 100%; box-shadow: none; }
+        }
+
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* СКРОЛЛ КОНТЕЙНЕРЫ (Где можно листать) */
+        /* СКРОЛЛ КОНТЕЙНЕРЫ */
         .scroll-container {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
-            overscroll-behavior-y: contain; /* ВАЖНО: скролл не передается родительскому окну (Телеграму) */
-            flex: 1; /* Занимает всё доступное место */
+            overscroll-behavior-y: contain;
+            flex: 1;
             position: relative;
         }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* НОВЫЙ БЕЗОПАСНЫЙ ОТСТУП СВЕРХУ */
-        /* Увеличил до 25px + safe area, чтобы не наезжало на крестик ТГ */
-        .header-safe-padding { 
-            padding-top: calc(env(safe-area-inset-top) + 25px); 
-            padding-bottom: 10px;
-        } 
-
+        /* АНИМАЦИИ */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes pulseText { 0% { opacity: 0.3; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.3; transform: scale(1); } }
@@ -102,11 +101,10 @@
 
         .hidden-force { display: none !important; }
         
-        /* ПРИЛОЖЕНИЕ */
         #app {
             width: 100%; height: 100%;
             display: flex; flex-direction: column;
-            overflow: hidden; /* Важно, чтобы сам APP не скроллился */
+            overflow: hidden;
         }
     </style>
    
@@ -185,17 +183,13 @@ let accessError = null;
 
 const tg = window.Telegram.WebApp;
 
-// === ВАЖНЫЕ НАСТРОЙКИ ДЛЯ БЛОКИРОВКИ СВАЙПОВ ===
+// === НАСТРОЙКИ ТГ (БЕЗ FULLSCREEN, НО С ПОКРАСКОЙ ШАПКИ) ===
 try { 
-    tg.expand(); // Развернуть на полную высоту
-    
-    // Новая фишка ТГ: запрещает свайп вниз для закрытия (работает в новых версиях)
-    if (tg.isVerticalSwipesEnabled !== undefined) {
-        tg.isVerticalSwipesEnabled = false; 
-    }
-    
-    // Красим шапку телеграма в цвет фона (чтобы сливалась)
-    tg.setHeaderColor('#ffffff'); // По умолчанию белый
+    tg.expand(); 
+    // Запрет свайпа вниз (чтобы не закрывалось случайно)
+    if (tg.isVerticalSwipesEnabled !== undefined) tg.isVerticalSwipesEnabled = false; 
+    // Цвет шапки - белый по умолчанию (чтобы сливалось с фоном)
+    tg.setHeaderColor('#f8fafc'); 
 } catch(e) {}
 
 async function userClickedStart() {
@@ -439,12 +433,12 @@ function toggleTheme() {
         document.documentElement.classList.add('dark');
         wrapper.classList.add('dark');
         auth.style.backgroundColor = '#000';
-        tg.setHeaderColor('#000000'); // Красим шапку ТГ в черный
+        try { tg.setHeaderColor('#000000'); } catch(e){} // Шапка ТГ черная
     } else {
         document.documentElement.classList.remove('dark');
         wrapper.classList.remove('dark');
         auth.style.backgroundColor = '#fff';
-        tg.setHeaderColor('#ffffff'); // Красим шапку ТГ в белый
+        try { tg.setHeaderColor('#f8fafc'); } catch(e){} // Шапка ТГ белая (под цвет фона)
     }
     render();
 }
@@ -620,38 +614,24 @@ function goHome() {
 function render() {
     const app = document.getElementById('app');
     
-    // Запоминаем скролл
     let filterScrollPos = 0;
     const filterList = document.getElementById('topics-list');
     if(filterList) filterScrollPos = filterList.scrollTop;
 
     app.innerHTML = renderHeader();
     
-    // ГЛАВНЫЙ КОНТЕЙНЕР ДЛЯ СКРОЛЛА (scroll-container)
     let contentHtml = '';
+    if (state.view === 'menu') contentHtml = renderMenu();
+    else if (state.view === 'learn') contentHtml = renderLearn();
+    else if (state.view === 'quiz' || state.view === 'mistakes') contentHtml = renderQuiz();
+    else if (state.view === 'cards') contentHtml = renderCards();
 
-    if (state.view === 'menu') {
-        contentHtml = renderMenu();
-    } else if (state.view === 'learn') {
-        contentHtml = renderLearn();
-    } else if (state.view === 'quiz' || state.view === 'mistakes') {
-        contentHtml = renderQuiz();
-    } else if (state.view === 'cards') {
-        contentHtml = renderCards();
-    }
-
-    // Вставляем контент
     app.innerHTML += contentHtml;
 
-    // Добавляем модалку если есть
-    if (state.showFilterModal) {
-        app.innerHTML += renderFilterModal();
-    }
+    if (state.showFilterModal) app.innerHTML += renderFilterModal();
     
-    // Инициализация карточек
     if (state.view === 'cards') setTimeout(initCardEvents, 0);
 
-    // Восстановление скролла
     if(state.showFilterModal) {
         const newFilterList = document.getElementById('topics-list');
         if(newFilterList) newFilterList.scrollTop = filterScrollPos;
@@ -662,9 +642,9 @@ function render() {
 
 function renderHeader() {
     const isHome = state.view === 'menu';
-    // Добавлен класс header-safe-padding
+    // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: bg-inherit чтобы цвет брался от темы
     return `
-    <div class="bg-slate-50 dark:bg-black relative z-50 px-4 flex items-center justify-between transition-colors shadow-sm header-safe-padding flex-shrink-0">
+    <div class="bg-slate-50 dark:bg-black flex-shrink-0 relative z-50 px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between h-[60px] transition-colors shadow-sm">
         <div class="flex items-center gap-3">
             ${!isHome ? `
                 <button onclick="goHome()" class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
@@ -763,7 +743,6 @@ function renderMenu() {
     const errors = Object.values(state.userProgress).filter(p => p.status === 'wrong').length;
     const allSelected = state.selectedTopics.length === availableTopics.length;
 
-    // Добавлен класс scroll-container
     return `
     <div class="scroll-container p-4 space-y-6 pb-20 w-full animate-fade-in">
         <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-8 text-white shadow-soft dark:shadow-none transition-colors relative overflow-hidden">
@@ -855,12 +834,18 @@ function renderMenu() {
 
 function renderLearn() {
     const questions = getFilteredQuestions('learn');
-    // Добавлен flex и scroll-container
     return `
     <div class="flex flex-col h-full w-full">
         
-        <div class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800">
-            <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="ml-auto flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
+        <div id="learn-header" class="flex-shrink-0 px-4 py-3 flex justify-between items-center bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-slate-800 h-[60px]">
+            <div class="flex items-center gap-3" onclick="goHome()">
+                <button class="p-1 -ml-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white transition-colors">
+                    <i data-lucide="chevron-left" class="w-7 h-7"></i>
+                </button>
+                <h2 class="font-black text-xl text-slate-900 dark:text-white font-sans">Конспект</h2>
+            </div>
+            
+            <button onclick="state.hideAnswersInLearn = !state.hideAnswersInLearn; render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all border ${state.hideAnswersInLearn ? 'bg-black text-white border-black dark:bg-white dark:text-black' : 'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}">
                 <i data-lucide="${state.hideAnswersInLearn ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>
                 ${state.hideAnswersInLearn ? 'Ответы' : 'Скрыть'}
             </button>
@@ -899,7 +884,8 @@ function renderLearn() {
                     </div>
                 </div>
             `).join('')}
-            <div class="h-20"></div> </div>
+            <div class="h-20"></div>
+        </div>
     </div>`;
 }
 
