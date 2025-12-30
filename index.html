@@ -170,9 +170,9 @@ async function performAccessCheck() {
     if(typeof physiology_questions==='undefined'){ accessError={type:'file',msg:'Файл questions.js не найден.'};checkStateTransition();return;}
     const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
-    if(!currentUserId && userId) currentUserId = userId; 
-    if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
+    if(!userId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
     
+    currentUserId = userId;
     const ck = `imed_access_v2_${currentUserId}`; 
 
     try{
@@ -337,8 +337,9 @@ function processQuestions() {
             image: q.image 
         };
     });
+    // При первом запуске (если нет сохраненных) выбираем все темы
     availableTopics = [...new Set(QUESTIONS_DATA.map(q => q.topic))];
-    state.selectedTopics = [...availableTopics];
+    if (state.selectedTopics.length === 0) state.selectedTopics = [...availableTopics];
 }
 
 const state = { view: 'menu', isDark: false, showFilterModal: false, showResetModal: false, selectedTopics: [], resetSelectedTopics: [], userProgress: {}, resumeState: null, playableQuestions: [], currentQuestionIndex: 0, quizFinished: false, sessionAnswers: {}, selectedOptions: [], isAnswerChecked: false, lastResult: false, isShuffleEnabled: false, comboStreak: 0, hideAnswersInLearn: false, isFlipped: false, swipeX: 0, animState: 'idle' };
@@ -362,18 +363,20 @@ function toggleShuffle() { haptic('light'); state.isShuffleEnabled=!state.isShuf
 function toggleTopic(t) { 
     if(state.selectedTopics.includes(t)) state.selectedTopics=state.selectedTopics.filter(x=>x!==t); 
     else state.selectedTopics.push(t); 
-    if(state.showFilterModal) updateTopicListUI('filter'); 
+    // !!! ИСПРАВЛЕНИЕ !!!
+    // Раньше тут был только updateTopicListUI, который не перерисовывал кнопку полностью, 
+    // из-за чего могли быть проблемы с состоянием.
+    // Теперь мы вызываем render(), если модалка открыта, чтобы перерисовать состояние "начисто".
+    if(state.showFilterModal) render(); 
     else render();
-    // Сохраняем выбор тем сразу
     saveProgressToCloud();
 }
 function toggleSelectAllTopics() { 
     haptic('medium'); 
     if(state.selectedTopics.length===availableTopics.length) state.selectedTopics=[]; 
     else state.selectedTopics=[...availableTopics]; 
-    if(state.showFilterModal){updateTopicListUI('filter');updateSelectAllButtonUI('filter');} 
+    if(state.showFilterModal) render(); // То же самое - полный ререндер
     else render();
-    // Сохраняем выбор тем сразу
     saveProgressToCloud();
 }
 
@@ -381,13 +384,14 @@ function toggleSelectAllTopics() {
 function toggleResetTopic(t) { 
     if(state.resetSelectedTopics.includes(t)) state.resetSelectedTopics=state.resetSelectedTopics.filter(x=>x!==t); 
     else state.resetSelectedTopics.push(t); 
-    updateTopicListUI('reset'); 
+    // Для модалки сброса тоже делаем полный ререндер, чтобы не было глюков
+    render(); 
 }
 function toggleSelectAllReset() { 
     haptic('medium'); 
     if(state.resetSelectedTopics.length===availableTopics.length) state.resetSelectedTopics=[]; 
     else state.resetSelectedTopics=[...availableTopics]; 
-    updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
+    render();
 }
 async function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
@@ -408,70 +412,14 @@ async function confirmReset() {
     render();
 }
 
+// ЭТА ФУНКЦИЯ БОЛЬШЕ НЕ НУЖНА В ТАКОМ ВИДЕ, ТАК КАК МЫ ДЕЛАЕМ ПОЛНЫЙ РЕРЕНДЕР
+// НО Я ЕЁ УПРОЩУ И ОСТАВЛЮ ДЛЯ СОВМЕСТИМОСТИ, ЕСЛИ ВДРУГ ГДЕ-ТО ВЫЗЫВАЕТСЯ
 function updateTopicListUI(mode) {
-    const listId = mode === 'filter' ? 'topics-list' : 'reset-topics-list';
-    const list = document.getElementById(listId); if(!list) return;
-    
-    const selectedArr = mode === 'filter' ? state.selectedTopics : state.resetSelectedTopics;
-
-    list.querySelectorAll('button[data-topic]').forEach(btn => {
-        const t = btn.getAttribute('data-topic');
-        const sel = selectedArr.includes(t);
-        const icon = btn.querySelector('.icon-area');
-        
-        // --- ИСПРАВЛЕНИЕ: ДОБАВЛЕН RELATIVE ---
-        // Кнопка всегда имеет класс relative, чтобы иконка (absolute) не улетала
-        let btnClass = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click relative";
-        
-        let progressHtml = '';
-        if (mode === 'filter') {
-            const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
-            const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
-            const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
-            
-            let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
-            let fillBg = sel ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-emerald-500';
-            let txtColor = sel ? 'text-white/60 dark:text-black/60' : 'text-slate-400';
-
-            progressHtml = `
-                <div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div>
-                <div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>
-            `;
-        }
-
-        if(sel) { 
-            // Добавляем цвета выбранного состояния
-            btnClass += " bg-black text-white dark:bg-white dark:text-black border border-transparent"; 
-            if(icon) icon.innerHTML='<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>';
-        } else { 
-            // Добавляем цвета невыбранного состояния
-            btnClass += " bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"; 
-            if(icon) icon.innerHTML=''; 
-        }
-        
-        // Применяем класс
-        btn.className = btnClass;
-
-        const contentDiv = btn.querySelector('.topic-content');
-        if(contentDiv) contentDiv.innerHTML = `<span class="block text-wrap leading-tight pr-6 mb-1">${t}</span> ${progressHtml}`;
-    });
-
-    const applyId = mode === 'filter' ? 'apply-btn' : 'confirm-reset-btn';
-    const apply = document.getElementById(applyId); 
-    if(apply) {
-        if (mode === 'filter') apply.innerText = `Применить (${selectedArr.length})`;
-        else apply.innerText = `Сбросить (${selectedArr.length})`;
-    }
-    lucide.createIcons();
+    // Пустышка, так как теперь мы используем render()
 }
 
 function updateSelectAllButtonUI(mode) {
-    const btnId = mode === 'filter' ? 'select-all-btn' : 'reset-select-all-btn';
-    const btn = document.getElementById(btnId); if(!btn) return;
-    const selectedArr = mode === 'filter' ? state.selectedTopics : state.resetSelectedTopics;
-    const all = selectedArr.length === availableTopics.length;
-    btn.innerHTML=`<span>${all?'Снять выделение':'Выбрать все'}</span><i data-lucide="${all?'trash-2':'layers'}" class="w-4 h-4"></i>`;
-    lucide.createIcons();
+     // Пустышка
 }
 
 function getFilteredQuestions(mode) {
@@ -487,10 +435,11 @@ function startMode(mode, resume=false) {
     if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
     state.playableQuestions=q; 
     
-    // Ищем первый нерешенный
+    // Ищем первый нерешенный (с безопасной проверкой)
     if (mode === 'quiz' || mode === 'cards') {
         let firstUnsolved = q.findIndex(question => {
-            const p = state.userProgress[question.id];
+            // Проверка на undefined
+            const p = state.userProgress && state.userProgress[question.id];
             return !p || (p.status !== 'correct');
         });
         if (firstUnsolved === -1) firstUnsolved = 0;
@@ -514,7 +463,8 @@ function loadStateForIndex(i) {
         return;
     }
 
-    const history = state.userProgress[q.id];
+    // Безопасный доступ
+    const history = state.userProgress && state.userProgress[q.id];
     if (history && history.selected) {
         state.selectedOptions = history.selected;
         state.isAnswerChecked = true;
@@ -533,6 +483,10 @@ function checkAnswer() {
     state.isAnswerChecked=true; const q=state.playableQuestions[state.currentQuestionIndex];
     const sel=[...state.selectedOptions].sort().toString(), corr=[...q.correctIndices].sort().toString();
     state.lastResult=(sel===corr); haptic(state.lastResult?'success':'error');
+    
+    // Инициализация объекта, если его нет
+    if(!state.userProgress) state.userProgress = {};
+    
     state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1, selected: [...state.selectedOptions] };
     saveCurrentState(); saveProgressToCloud(); render();
 }
@@ -745,15 +699,104 @@ function renderCardsFooter() {
 
 function renderFilterModal() {
     if(!state.showFilterModal) return '';
-    const allSel=state.selectedTopics.length===availableTopics.length;
+    // !! ИСПОЛЬЗУЕМ ОБЩИЙ РЕНДЕР ДЛЯ ФИЛЬТРА !!
+    const modal = document.createElement('div');
+    modal.innerHTML = `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
+        <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
+            <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
+            <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
+                <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>Выбрать все</span><i data-lucide="layers" class="w-4 h-4"></i></button>
+                <!-- СПИСОК ТЕМ БУДЕТ ЗАПОЛНЕН JS -->
+            </div>
+            <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить</button>
+        </div>
+    </div>`;
+    
+    // ВАЖНО: Возвращаем HTML, но потом сразу заполняем список через updateTopicListUI
+    // Чтобы полоски появились мгновенно, можно вызвать генерацию HTML прямо здесь,
+    // но чтобы не дублировать код, мы используем setTimeout(..., 0) в основном render()
+    
+    // Лучше сгенерируем список прямо тут для первого кадра
     const counts={}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
+    const topicList = availableTopics.map(t => {
+        const sel = state.selectedTopics.includes(t);
+        const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
+        const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
+        const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
+        
+        let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
+        let fillBg = sel ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-emerald-500';
+        let txtColor = sel ? 'text-white/60 dark:text-black/60' : 'text-slate-400';
+        
+        let btnClass = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click relative";
+        let iconHtml = '';
+        
+        if (sel) {
+            btnClass += " bg-black text-white dark:bg-white dark:text-black border border-transparent";
+            iconHtml = '<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>';
+        } else {
+            btnClass += " bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300";
+        }
+
+        return `<button data-topic="${t}" onclick="toggleTopic('${t}')" class="${btnClass}">
+            <div class="topic-content w-full">
+                <span class="block text-wrap leading-tight pr-6 mb-1">${t}</span>
+                <div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div>
+                <div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>
+            </div>
+            <div class="icon-area">${iconHtml}</div>
+        </button>`;
+    }).join('');
+    
+    // Вставляем сгенерированный список в шаблон
+    return modal.innerHTML.replace('<!-- СПИСОК ТЕМ БУДЕТ ЗАПОЛНЕН JS -->', topicList).replace('id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">', 'id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">' + topicList);
+}
+
+// ПРАВИЛЬНЫЙ РЕНДЕР МОДАЛКИ (Без хаков с replace)
+function renderFilterModal() {
+    if(!state.showFilterModal) return '';
+    const counts={}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
+    
+    const topicListHTML = availableTopics.map(t => {
+        const sel = state.selectedTopics.includes(t);
+        const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
+        const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
+        const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
+        
+        let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
+        let fillBg = sel ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-emerald-500';
+        let txtColor = sel ? 'text-white/60 dark:text-black/60' : 'text-slate-400';
+        
+        let btnClass = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click relative";
+        let iconHtml = '';
+        
+        if (sel) {
+            btnClass += " bg-black text-white dark:bg-white dark:text-black border border-transparent";
+            iconHtml = '<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>';
+        } else {
+            btnClass += " bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300";
+        }
+
+        return `<button data-topic="${t}" onclick="toggleTopic('${t}')" class="${btnClass}">
+            <div class="topic-content w-full">
+                <span class="block text-wrap leading-tight pr-6 mb-1">${t}</span>
+                <div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div>
+                <div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>
+            </div>
+            <div class="icon-area">${iconHtml}</div>
+        </button>`;
+    }).join('');
+
+    const allSel = state.selectedTopics.length === availableTopics.length;
+
     return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
             <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
             <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black border border-transparent relative':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>':''}</div></button>`}).join('')}
+                ${topicListHTML}
             </div>
             <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить (${state.selectedTopics.length})</button>
         </div>
@@ -768,7 +811,7 @@ function renderResetModal() {
             <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Сброс прогресса</h3><button onclick="toggleResetModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
             <div id="reset-topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="reset-select-all-btn" onclick="toggleSelectAllReset()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{const sel=state.resetSelectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleResetTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
+                ${availableTopics.map(t=>{const sel=state.resetSelectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleResetTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black border border-transparent relative':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>':''}</div></button>`}).join('')}
             </div>
             <button id="confirm-reset-btn" onclick="confirmReset()" class="w-full py-4 bg-rose-500 text-white rounded-2xl font-bold text-lg shrink-0 btn-click shadow-lg shadow-rose-500/30">Сбросить (${state.resetSelectedTopics.length})</button>
         </div>
