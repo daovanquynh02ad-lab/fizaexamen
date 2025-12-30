@@ -241,6 +241,15 @@ async function saveProgressToCloud() {
     isSaving = false;
 }
 
+async function resetProgress() {
+    if (!confirm('Вы уверены? Весь прогресс будет удален.')) return;
+    haptic('warning');
+    state.userProgress = {};
+    localStorage.removeItem(`imed_progress_${currentUserId}`);
+    saveProgressToCloud(); 
+    render(); 
+}
+
 function checkStateTransition() {
     if(!videoFinished && !accessError) return; 
     const intro=document.getElementById('intro-layer'), auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen'), app=document.getElementById('app');
@@ -351,7 +360,7 @@ function toggleShuffle() { haptic('light'); state.isShuffleEnabled=!state.isShuf
 function toggleTopic(t) { if(state.selectedTopics.includes(t)) state.selectedTopics=state.selectedTopics.filter(x=>x!==t); else state.selectedTopics.push(t); if(state.showFilterModal) updateTopicListUI('filter'); else render(); }
 function toggleSelectAllTopics() { haptic('medium'); if(state.selectedTopics.length===availableTopics.length) state.selectedTopics=[]; else state.selectedTopics=[...availableTopics]; if(state.showFilterModal){updateTopicListUI('filter');updateSelectAllButtonUI('filter');} else render(); }
 
-// --- ЛОГИКА ДЛЯ СБРОСА ---
+// СБРОС ТЕМ
 function toggleResetTopic(t) { 
     if(state.resetSelectedTopics.includes(t)) state.resetSelectedTopics=state.resetSelectedTopics.filter(x=>x!==t); 
     else state.resetSelectedTopics.push(t); 
@@ -366,8 +375,7 @@ function toggleSelectAllReset() {
 async function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
     haptic('warning');
-    if(!confirm(`Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`)) return;
-
+    
     // Удаляем прогресс только для вопросов из выбранных тем
     const topicsToReset = new Set(state.resetSelectedTopics);
     QUESTIONS_DATA.forEach(q => {
@@ -381,6 +389,7 @@ async function confirmReset() {
     render();
 }
 
+// ОБЩАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ СПИСКОВ (ФИЛЬТР И СБРОС)
 function updateTopicListUI(mode) {
     const listId = mode === 'filter' ? 'topics-list' : 'reset-topics-list';
     const list = document.getElementById(listId); if(!list) return;
@@ -392,7 +401,6 @@ function updateTopicListUI(mode) {
         const sel = selectedArr.includes(t);
         const icon = btn.querySelector('.icon-area');
         
-        // Progress HTML (только для фильтра, в сбросе он не нужен так ярко)
         let progressHtml = '';
         if (mode === 'filter') {
             const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
@@ -453,7 +461,6 @@ function startMode(mode, resume=false) {
     state.playableQuestions=q; state.currentQuestionIndex=0; state.quizFinished=false;
     state.view=mode; state.sessionAnswers={}; state.resumeState=null; 
 
-    // Ищем первый нерешенный
     if (mode === 'quiz' || mode === 'cards') {
         let firstUnsolved = q.findIndex(question => {
             const p = state.userProgress[question.id];
@@ -633,6 +640,7 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
+            <!-- РАСПОРКА ДЛЯ СКРОЛЛА: ТЕПЕРЬ ОТВЕТЫ ВСЕГДА ВЫЛЕЗАЮТ ИЗ ПОД КНОПКИ -->
             <div class="h-[100px] w-full shrink-0"></div>
         </div>
     </div>`;
@@ -680,6 +688,7 @@ function renderCardsContent() {
                                     if(!opt||!opt.trim())return'';
                                     return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left leading-tight">${opt}</div>`
                                 }).join('')}
+                                <!-- РАСПОРКА ДЛЯ КАРТОЧКИ (FRONT) -->
                                 <div class="h-8 w-full shrink-0"></div>
                              </div>
                          </div>
@@ -690,6 +699,7 @@ function renderCardsContent() {
                         <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white shrink-0">Правильный ответ</h3>
                         <div class="flex-1 flex flex-col items-center justify-center w-full card-scroll min-h-0">
                             <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">${correctText}</div>
+                            <!-- РАСПОРКА ДЛЯ КАРТОЧКИ (BACK) -->
                             <div class="h-8 w-full shrink-0"></div>
                         </div>
                     </div>
@@ -718,7 +728,7 @@ function renderFilterModal() {
             <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
+                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="flex items-center min-w-0 flex-1"><span class="block text-wrap leading-tight pr-2">${t}</span><span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${counts[t]||0})</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
             </div>
             <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить (${state.selectedTopics.length})</button>
         </div>
