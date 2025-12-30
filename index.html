@@ -49,7 +49,7 @@
         .layout-content {
             flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
-            padding-bottom: 250px !important; 
+            padding-bottom: 140px !important; 
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
@@ -137,13 +137,8 @@
 
 <script>
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
-
-let accessData = null; 
-let videoFinished = false; 
-let accessError = null;
-let currentUserId = null;
-let isSaving = false;
-
+let accessData = null; let videoFinished = false; let accessError = null;
+let currentUserId = null; let isSaving = false;
 const tg = window.Telegram.WebApp;
 
 try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
@@ -173,51 +168,28 @@ function finishVideo() { videoFinished = true; checkStateTransition(); }
 
 async function performAccessCheck() {
     if(typeof physiology_questions==='undefined'){ accessError={type:'file',msg:'Файл questions.js не найден.'};checkStateTransition();return;}
-    
-    currentUserId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
-    
+    const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
-
-    if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
+    if(!userId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
     
-    const ck = `imed_access_v2_${currentUserId}`; 
+    currentUserId = userId;
+    const ck = `imed_access_v2_${userId}`; 
 
     try{
         const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
-        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}`,{signal:ctrl.signal});
+        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`,{signal:ctrl.signal});
         const data=await res.json();
-        
         if(data.allowed){ 
             accessData=data; 
-            if (data.progress && Object.keys(data.progress).length > 0) {
-                state.userProgress = data.progress;
-            } else {
-                const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
-                if (localP) state.userProgress = JSON.parse(localP);
-            }
-            
+            if (data.progress && Object.keys(data.progress).length > 0) state.userProgress = data.progress;
+            else { const localP = localStorage.getItem(`imed_progress_${userId}`); if (localP) state.userProgress = JSON.parse(localP); }
             localStorage.setItem(ck,JSON.stringify(data)); 
-            localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
-
+            localStorage.setItem(`imed_progress_${userId}`, JSON.stringify(state.userProgress));
             processQuestions(); 
-        } else {
-            localStorage.removeItem(ck);
-            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
-        }
+        } else { localStorage.removeItem(ck); accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'}; }
     } catch(e){ 
-        const c = localStorage.getItem(ck);
-        const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
-        
-        if(c){ 
-            try{ 
-                const p=JSON.parse(c); 
-                if(p.allowed){ 
-                    accessData=p; 
-                    if (localP) state.userProgress = JSON.parse(localP);
-                    processQuestions(); 
-                } 
-            } catch(err){ localStorage.removeItem(ck); } 
-        }
+        const c = localStorage.getItem(ck); const localP = localStorage.getItem(`imed_progress_${userId}`);
+        if(c){ try{ const p=JSON.parse(c); if(p.allowed){ accessData=p; if(localP) state.userProgress = JSON.parse(localP); processQuestions(); } } catch(err){ localStorage.removeItem(ck); } }
         if (!accessData) accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
     }
     checkStateTransition();
@@ -227,17 +199,7 @@ async function saveProgressToCloud() {
     if (!currentUserId || !accessData || isSaving) return;
     isSaving = true;
     localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
-    try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                userId: currentUserId,
-                progress: state.userProgress
-            })
-        });
-    } catch(e) {}
+    try { await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: currentUserId, progress: state.userProgress }) }); } catch(e) {}
     isSaving = false;
 }
 
@@ -350,71 +312,52 @@ function toggleTheme() {
     render();
 }
 function toggleFilterModal(show) { if(show)haptic('light'); state.showFilterModal=show; render(); }
-function toggleResetModal(show) { 
-    if(show) { haptic('light'); state.resetSelectedTopics = []; }
-    state.showResetModal=show; 
-    render(); 
-}
-
+function toggleResetModal(show) { if(show) { haptic('light'); state.resetSelectedTopics = []; } state.showResetModal=show; render(); }
 function toggleShuffle() { haptic('light'); state.isShuffleEnabled=!state.isShuffleEnabled; render(); }
 function toggleTopic(t) { if(state.selectedTopics.includes(t)) state.selectedTopics=state.selectedTopics.filter(x=>x!==t); else state.selectedTopics.push(t); if(state.showFilterModal) updateTopicListUI('filter'); else render(); }
 function toggleSelectAllTopics() { haptic('medium'); if(state.selectedTopics.length===availableTopics.length) state.selectedTopics=[]; else state.selectedTopics=[...availableTopics]; if(state.showFilterModal){updateTopicListUI('filter');updateSelectAllButtonUI('filter');} else render(); }
-
-// СБРОС ТЕМ
-function toggleResetTopic(t) { 
-    if(state.resetSelectedTopics.includes(t)) state.resetSelectedTopics=state.resetSelectedTopics.filter(x=>x!==t); 
-    else state.resetSelectedTopics.push(t); 
-    updateTopicListUI('reset'); 
-}
-function toggleSelectAllReset() { 
-    haptic('medium'); 
-    if(state.resetSelectedTopics.length===availableTopics.length) state.resetSelectedTopics=[]; 
-    else state.resetSelectedTopics=[...availableTopics]; 
-    updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
-}
+function toggleResetTopic(t) { if(state.resetSelectedTopics.includes(t)) state.resetSelectedTopics=state.resetSelectedTopics.filter(x=>x!==t); else state.resetSelectedTopics.push(t); updateTopicListUI('reset'); }
+function toggleSelectAllReset() { haptic('medium'); if(state.resetSelectedTopics.length===availableTopics.length) state.resetSelectedTopics=[]; else state.resetSelectedTopics=[...availableTopics]; updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); }
 async function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
     haptic('warning');
-    
-    // Удаляем прогресс только для вопросов из выбранных тем
+    if(!confirm(`Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`)) return;
     const topicsToReset = new Set(state.resetSelectedTopics);
-    QUESTIONS_DATA.forEach(q => {
-        if(topicsToReset.has(q.topic)) {
-            delete state.userProgress[q.id];
+    // Удаляем прогресс только для выбранных тем
+    // Пересоздаем userProgress, фильтруя удаленное
+    const newProgress = {};
+    for (const qId in state.userProgress) {
+        // Находим тему вопроса по ID
+        const q = QUESTIONS_DATA.find(x => x.id == qId);
+        if (q && !topicsToReset.has(q.topic)) {
+            newProgress[qId] = state.userProgress[qId];
         }
-    });
-
+    }
+    state.userProgress = newProgress;
     await saveProgressToCloud();
     toggleResetModal(false);
     render();
 }
 
-// ОБЩАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ СПИСКОВ (ФИЛЬТР И СБРОС)
 function updateTopicListUI(mode) {
     const listId = mode === 'filter' ? 'topics-list' : 'reset-topics-list';
     const list = document.getElementById(listId); if(!list) return;
-    
     const selectedArr = mode === 'filter' ? state.selectedTopics : state.resetSelectedTopics;
-
     list.querySelectorAll('button[data-topic]').forEach(btn => {
         const t = btn.getAttribute('data-topic');
         const sel = selectedArr.includes(t);
         const icon = btn.querySelector('.icon-area');
         
+        // РЕНДЕР ПРОГРЕССА (ТОЛЬКО ДЛЯ ФИЛЬТРА)
         let progressHtml = '';
         if (mode === 'filter') {
             const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
             const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
             const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
-            
             let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
             let fillBg = sel ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-emerald-500';
             let txtColor = sel ? 'text-white/60 dark:text-black/60' : 'text-slate-400';
-
-            progressHtml = `
-                <div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div>
-                <div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>
-            `;
+            progressHtml = `<div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div><div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>`;
         }
 
         if(sel) { 
@@ -424,20 +367,14 @@ function updateTopicListUI(mode) {
             btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"; 
             if(icon) icon.innerHTML=''; 
         }
-
         const contentDiv = btn.querySelector('.topic-content');
         if(contentDiv) contentDiv.innerHTML = `<span class="block text-wrap leading-tight pr-6 mb-1">${t}</span> ${progressHtml}`;
     });
-
     const applyId = mode === 'filter' ? 'apply-btn' : 'confirm-reset-btn';
     const apply = document.getElementById(applyId); 
-    if(apply) {
-        if (mode === 'filter') apply.innerText = `Применить (${selectedArr.length})`;
-        else apply.innerText = `Сбросить (${selectedArr.length})`;
-    }
+    if(apply) { if (mode === 'filter') apply.innerText = `Применить (${selectedArr.length})`; else apply.innerText = `Сбросить (${selectedArr.length})`; }
     lucide.createIcons();
 }
-
 function updateSelectAllButtonUI(mode) {
     const btnId = mode === 'filter' ? 'select-all-btn' : 'reset-select-all-btn';
     const btn = document.getElementById(btnId); if(!btn) return;
@@ -458,9 +395,9 @@ function startMode(mode, resume=false) {
     let q = getFilteredQuestions(mode);
     if(!q.length){ alert("Нет вопросов!"); return; }
     if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
-    state.playableQuestions=q; state.currentQuestionIndex=0; state.quizFinished=false;
-    state.view=mode; state.sessionAnswers={}; state.resumeState=null; 
-
+    state.playableQuestions=q; 
+    
+    // Ищем первый нерешенный
     if (mode === 'quiz' || mode === 'cards') {
         let firstUnsolved = q.findIndex(question => {
             const p = state.userProgress[question.id];
@@ -468,33 +405,18 @@ function startMode(mode, resume=false) {
         });
         if (firstUnsolved === -1) firstUnsolved = 0;
         state.currentQuestionIndex = firstUnsolved;
-    } else {
-        state.currentQuestionIndex = 0;
-    }
+    } else { state.currentQuestionIndex = 0; }
     
-    loadStateForIndex(state.currentQuestionIndex);
-    render();
+    state.quizFinished = false; state.view = mode; state.sessionAnswers = {}; state.resumeState = null; 
+    loadStateForIndex(state.currentQuestionIndex); render();
 }
 function resetQuestionState() { state.selectedOptions=[]; state.isAnswerChecked=false; state.lastResult=false; state.isFlipped=false; state.swipeX=0; state.animState='idle'; }
 function saveCurrentState() { state.sessionAnswers[state.currentQuestionIndex] = { selectedOptions: [...state.selectedOptions], isAnswerChecked: state.isAnswerChecked, lastResult: state.lastResult }; }
 function loadStateForIndex(i) {
-    const q = state.playableQuestions[i];
-    if (!q) return resetQuestionState();
-    
-    if (state.sessionAnswers[i]) {
-        const s = state.sessionAnswers[i];
-        state.selectedOptions = s.selectedOptions; state.isAnswerChecked = s.isAnswerChecked; state.lastResult = s.lastResult;
-        return;
-    }
-
+    const q = state.playableQuestions[i]; if (!q) return resetQuestionState();
+    if (state.sessionAnswers[i]) { const s = state.sessionAnswers[i]; state.selectedOptions = s.selectedOptions; state.isAnswerChecked = s.isAnswerChecked; state.lastResult = s.lastResult; return; }
     const history = state.userProgress[q.id];
-    if (history && history.selected) {
-        state.selectedOptions = history.selected;
-        state.isAnswerChecked = true;
-        state.lastResult = (history.status === 'correct');
-    } else {
-        resetQuestionState();
-    }
+    if (history && history.selected) { state.selectedOptions = history.selected; state.isAnswerChecked = true; state.lastResult = (history.status === 'correct'); } else { resetQuestionState(); }
 }
 function handleOptionSelect(idx) {
     if(state.isAnswerChecked) return; haptic('light');
@@ -521,8 +443,7 @@ function prevQuestion() {
     render();
 }
 function goHome() {
-    haptic('medium');
-    saveProgressToCloud();
+    haptic('medium'); saveProgressToCloud();
     if(['quiz','cards','mistakes'].includes(state.view) && !state.quizFinished && state.playableQuestions.length) state.resumeState={mode:state.view, index:state.currentQuestionIndex, questions:state.playableQuestions};
     else state.resumeState=null;
     state.view='menu'; render();
@@ -533,15 +454,12 @@ function render() {
     let scrollTop=0; const cd=document.querySelector('.layout-content');
     if(cd && app.dataset.view===state.view) scrollTop=cd.scrollTop;
     app.dataset.view=state.view;
-
     let bodyHTML='', footerHTML='';
     if(state.view==='menu') bodyHTML=renderMenuContent();
     else if(state.view==='learn') bodyHTML=renderLearnContent();
     else if(state.view==='quiz'||state.view==='mistakes') { bodyHTML=renderQuizContent(); footerHTML=renderQuizFooter(); }
     else if(state.view==='cards') { bodyHTML=renderCardsContent(); footerHTML=renderCardsFooter(); }
-    
     app.innerHTML = `${renderHeader()}<div class="layout-content bg-slate-50 dark:bg-black">${bodyHTML}</div>${footerHTML}${state.showFilterModal?renderFilterModal():''}${state.showResetModal?renderResetModal():''}`;
-    
     if(state.view==='cards') setTimeout(initCardEvents,0);
     if(cd && scrollTop>0) document.querySelector('.layout-content').scrollTop=scrollTop;
     lucide.createIcons();
@@ -640,7 +558,6 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
-            <!-- РАСПОРКА ДЛЯ СКРОЛЛА: ТЕПЕРЬ ОТВЕТЫ ВСЕГДА ВЫЛЕЗАЮТ ИЗ ПОД КНОПКИ -->
             <div class="h-[100px] w-full shrink-0"></div>
         </div>
     </div>`;
@@ -688,7 +605,6 @@ function renderCardsContent() {
                                     if(!opt||!opt.trim())return'';
                                     return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left leading-tight">${opt}</div>`
                                 }).join('')}
-                                <!-- РАСПОРКА ДЛЯ КАРТОЧКИ (FRONT) -->
                                 <div class="h-8 w-full shrink-0"></div>
                              </div>
                          </div>
@@ -699,7 +615,6 @@ function renderCardsContent() {
                         <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white shrink-0">Правильный ответ</h3>
                         <div class="flex-1 flex flex-col items-center justify-center w-full card-scroll min-h-0">
                             <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">${correctText}</div>
-                            <!-- РАСПОРКА ДЛЯ КАРТОЧКИ (BACK) -->
                             <div class="h-8 w-full shrink-0"></div>
                         </div>
                     </div>
@@ -728,7 +643,7 @@ function renderFilterModal() {
             <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="flex items-center min-w-0 flex-1"><span class="block text-wrap leading-tight pr-2">${t}</span><span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${counts[t]||0})</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
+                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
             </div>
             <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить (${state.selectedTopics.length})</button>
         </div>
