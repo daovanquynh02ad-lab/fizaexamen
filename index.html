@@ -370,7 +370,7 @@ function toggleShuffle() { haptic('light'); state.isShuffleEnabled=!state.isShuf
 function toggleTopic(t) { 
     if(state.selectedTopics.includes(t)) state.selectedTopics=state.selectedTopics.filter(x=>x!==t); 
     else state.selectedTopics.push(t); 
-    if(state.showFilterModal) updateTopicListUI('filter'); 
+    if(state.showFilterModal) { updateTopicListUI('filter'); updateSelectAllButtonUI('filter'); }
     else render();
     saveProgressToCloud();
 }
@@ -380,7 +380,7 @@ function toggleSelectAllTopics() { haptic('medium'); if(state.selectedTopics.len
 function toggleResetTopic(t) { 
     if(state.resetSelectedTopics.includes(t)) state.resetSelectedTopics=state.resetSelectedTopics.filter(x=>x!==t); 
     else state.resetSelectedTopics.push(t); 
-    updateTopicListUI('reset'); 
+    updateTopicListUI('reset'); updateSelectAllButtonUI('reset');
 }
 function toggleSelectAllReset() { 
     haptic('medium'); 
@@ -392,37 +392,61 @@ function toggleSelectAllReset() {
 function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
     haptic('warning');
-    if(!confirm(`Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`)) return;
 
-    // 1. Создаем новый объект прогресса
-    const newProgress = {};
-    const topicsToRemove = new Set(state.resetSelectedTopics);
+    // Функция выполнения сброса (выносим отдельно для использования в разных контекстах)
+    const executeReset = () => {
+        // 1. Создаем новый объект прогресса
+        const newProgress = {};
+        const topicsToRemove = new Set(state.resetSelectedTopics);
 
-    // 2. Проходимся по всем записям прогресса
-    for (const [id, prog] of Object.entries(state.userProgress)) {
-        // Находим вопрос, чтобы узнать его тему
-        const q = QUESTIONS_DATA.find(x => x.id == id);
-        
-        // Если вопрос существует И его тема в списке на удаление -> ПРОПУСКАЕМ (удаляем)
-        if (q && topicsToRemove.has(q.topic)) {
-            continue; 
+        // 2. Проходимся по всем записям прогресса
+        for (const [id, prog] of Object.entries(state.userProgress)) {
+            // Находим вопрос
+            const q = QUESTIONS_DATA.find(x => x.id == id);
+            
+            // ГАРБЕДЖ КОЛЛЕКЦИЯ: Если вопроса больше нет в базе - удаляем запись (не добавляем в newProgress)
+            if (!q) continue;
+
+            // Если вопрос есть, но его тема выбрана для сброса - удаляем (не добавляем)
+            if (topicsToRemove.has(q.topic)) continue;
+            
+            // Иначе оставляем
+            newProgress[id] = prog;
         }
+
+        // 3. Обновляем состояние
+        state.userProgress = newProgress;
+        state.resetSelectedTopics = []; 
+
+        // 4. Обновляем UI
+        toggleResetModal(false);
+        render();
+        haptic('success');
         
-        // Иначе оставляем в новом прогрессе
-        newProgress[id] = prog;
+        // 5. Сохраняем в облако
+        saveProgressToCloud();
+    };
+
+    // ПРОВЕРКА СРЕДЫ: Если мы в Telegram WebApp, используем нативное окно
+    if (tg.showPopup) {
+        tg.showPopup({
+            title: 'Сброс прогресса',
+            message: `Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`,
+            buttons: [
+                {id: 'cancel', type: 'cancel'},
+                {id: 'ok', type: 'destructive', text: 'Сбросить'}
+            ]
+        }, function(btnId) {
+            if (btnId === 'ok') {
+                executeReset();
+            }
+        });
+    } else {
+        // Фоллбэк для браузера (на всякий случай)
+        if(confirm(`Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`)) {
+            executeReset();
+        }
     }
-
-    // 3. Обновляем состояние
-    state.userProgress = newProgress;
-    state.resetSelectedTopics = []; // Очищаем выбор
-
-    // 4. Сначала обновляем UI (мгновенно для пользователя)
-    toggleResetModal(false);
-    render();
-    haptic('success');
-    
-    // 5. Потом сохраняем в облако (в фоне)
-    saveProgressToCloud();
 }
 
 function updateTopicListUI(mode) {
