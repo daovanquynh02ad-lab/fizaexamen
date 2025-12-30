@@ -349,7 +349,7 @@ function processQuestions() {
     if (state.selectedTopics.length === 0) state.selectedTopics = [...availableTopics];
 }
 
-const state = { view: 'menu', isDark: false, showFilterModal: false, showResetModal: false, selectedTopics: [], resetSelectedTopics: [], userProgress: {}, resumeState: null, playableQuestions: [], currentQuestionIndex: 0, quizFinished: false, sessionAnswers: {}, selectedOptions: [], isAnswerChecked: false, lastResult: false, isShuffleEnabled: false, comboStreak: 0, hideAnswersInLearn: false, isFlipped: false, swipeX: 0, animState: 'idle' };
+const state = { view: 'menu', isDark: false, showFilterModal: false, showResetModal: false, showConfirmResetDialog: false, selectedTopics: [], resetSelectedTopics: [], userProgress: {}, resumeState: null, playableQuestions: [], currentQuestionIndex: 0, quizFinished: false, sessionAnswers: {}, selectedOptions: [], isAnswerChecked: false, lastResult: false, isShuffleEnabled: false, comboStreak: 0, hideAnswersInLearn: false, isFlipped: false, swipeX: 0, animState: 'idle' };
 
 function init() { render(); }
 function toggleTheme() {
@@ -389,64 +389,39 @@ function toggleSelectAllReset() {
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
 
+// !!! НОВАЯ ЛОГИКА СБРОСА (БЕЗ NATIVE CONFIRM) !!!
 function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
     haptic('warning');
+    // Вместо системного confirm вызываем отрисовку нашего модального окна
+    state.showConfirmResetDialog = true;
+    render(); 
+}
 
-    // Функция выполнения сброса (выносим отдельно для использования в разных контекстах)
-    const executeReset = () => {
-        // 1. Создаем новый объект прогресса
-        const newProgress = {};
-        const topicsToRemove = new Set(state.resetSelectedTopics);
+function executeFinalReset() {
+    haptic('success');
+    const newProgress = {};
+    const topicsToRemove = new Set(state.resetSelectedTopics);
 
-        // 2. Проходимся по всем записям прогресса
-        for (const [id, prog] of Object.entries(state.userProgress)) {
-            // Находим вопрос
-            const q = QUESTIONS_DATA.find(x => x.id == id);
-            
-            // ГАРБЕДЖ КОЛЛЕКЦИЯ: Если вопроса больше нет в базе - удаляем запись (не добавляем в newProgress)
-            if (!q) continue;
-
-            // Если вопрос есть, но его тема выбрана для сброса - удаляем (не добавляем)
-            if (topicsToRemove.has(q.topic)) continue;
-            
-            // Иначе оставляем
-            newProgress[id] = prog;
-        }
-
-        // 3. Обновляем состояние
-        state.userProgress = newProgress;
-        state.resetSelectedTopics = []; 
-
-        // 4. Обновляем UI
-        toggleResetModal(false);
-        render();
-        haptic('success');
-        
-        // 5. Сохраняем в облако
-        saveProgressToCloud();
-    };
-
-    // ПРОВЕРКА СРЕДЫ: Если мы в Telegram WebApp, используем нативное окно
-    if (tg.showPopup) {
-        tg.showPopup({
-            title: 'Сброс прогресса',
-            message: `Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`,
-            buttons: [
-                {id: 'cancel', type: 'cancel'},
-                {id: 'ok', type: 'destructive', text: 'Сбросить'}
-            ]
-        }, function(btnId) {
-            if (btnId === 'ok') {
-                executeReset();
-            }
-        });
-    } else {
-        // Фоллбэк для браузера (на всякий случай)
-        if(confirm(`Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`)) {
-            executeReset();
-        }
+    for (const [id, prog] of Object.entries(state.userProgress)) {
+        const q = QUESTIONS_DATA.find(x => x.id == id);
+        if (!q) continue; // Garbage collection
+        if (topicsToRemove.has(q.topic)) continue; // Reset logic
+        newProgress[id] = prog;
     }
+
+    state.userProgress = newProgress;
+    state.resetSelectedTopics = []; 
+    state.showConfirmResetDialog = false; // Close confirm dialog
+    state.showResetModal = false; // Close topic selection modal
+
+    saveProgressToCloud();
+    render();
+}
+
+function cancelReset() {
+    state.showConfirmResetDialog = false;
+    render();
 }
 
 function updateTopicListUI(mode) {
@@ -637,7 +612,7 @@ function render() {
     else if(state.view==='quiz'||state.view==='mistakes') { bodyHTML=renderQuizContent(); footerHTML=renderQuizFooter(); }
     else if(state.view==='cards') { bodyHTML=renderCardsContent(); footerHTML=renderCardsFooter(); }
     
-    app.innerHTML = `${renderHeader()}<div class="layout-content bg-slate-50 dark:bg-black">${bodyHTML}</div>${footerHTML}${state.showFilterModal?renderFilterModal():''}${state.showResetModal?renderResetModal():''}`;
+    app.innerHTML = `${renderHeader()}<div class="layout-content bg-slate-50 dark:bg-black">${bodyHTML}</div>${footerHTML}${state.showFilterModal?renderFilterModal():''}${state.showResetModal?renderResetModal():''}${state.showConfirmResetDialog?renderConfirmResetDialog():''}`;
     
     if(state.view==='cards') setTimeout(initCardEvents,0);
     if(cd && scrollTop>0) document.querySelector('.layout-content').scrollTop=scrollTop;
@@ -870,6 +845,30 @@ function renderResetModal() {
                 ${availableTopics.map(t=>{const sel=state.resetSelectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleResetTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black border border-transparent relative':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>':''}</div></button>`}).join('')}
             </div>
             <button id="confirm-reset-btn" onclick="confirmReset()" class="w-full py-4 bg-rose-500 text-white rounded-2xl font-bold text-lg shrink-0 btn-click shadow-lg shadow-rose-500/30">Сбросить (${state.resetSelectedTopics.length})</button>
+        </div>
+    </div>`;
+}
+
+function renderConfirmResetDialog() {
+    return `<div class="absolute inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6 animate-fade-in">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center animate-slide-up">
+            <div class="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 rounded-full flex items-center justify-center mb-4">
+                <i data-lucide="alert-triangle" class="w-8 h-8 text-rose-500"></i>
+            </div>
+            <h3 class="text-xl font-black text-slate-900 dark:text-white mb-2">Вы уверены?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium leading-relaxed">
+                Вы собираетесь сбросить прогресс для 
+                <span class="text-slate-900 dark:text-white font-bold">${state.resetSelectedTopics.length} тем</span>. 
+                Это действие нельзя отменить.
+            </p>
+            <div class="flex flex-col gap-3 w-full">
+                <button onclick="executeFinalReset()" class="w-full py-3 bg-rose-500 text-white rounded-xl font-bold shadow-lg shadow-rose-500/30 active:scale-95 transition-transform btn-click">
+                    Сбросить
+                </button>
+                <button onclick="cancelReset()" class="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-bold active:scale-95 transition-transform btn-click">
+                    Отмена
+                </button>
+            </div>
         </div>
     </div>`;
 }
