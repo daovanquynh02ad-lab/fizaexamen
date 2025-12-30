@@ -21,8 +21,6 @@
 
     <!-- 2. АВТОМАТИЧЕСКИЙ СБРОС КЭША СКРИПТОВ -->
     <script>
-        // Этот код добавляет к questions.js уникальную метку времени.
-        // Телеграм будет думать, что это новый файл при каждом запуске.
         document.write('<script src="questions.js?v=' + Date.now() + '"><\/script>');
     </script>
 
@@ -102,6 +100,9 @@
         .animate-fade-in { animation: fadeIn 0.25s ease-out; }
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
+        
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
 
         /* ЭКРАНЫ */
         #intro-layer, #auth-screen, #block-screen {
@@ -163,12 +164,24 @@ const tg = window.Telegram.WebApp;
 
 try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
 
+// !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ ВИБРАЦИИ !!!
 function haptic(type='light') {
-    if(tg.HapticFeedback) {
-        if(type==='error') tg.HapticFeedback.notificationOccurred('error');
-        else if(type==='success') tg.HapticFeedback.notificationOccurred('success');
-        else tg.HapticFeedback.impactOccurred(type);
-    } else if(navigator.vibrate) navigator.vibrate(10);
+    try {
+        if(tg.HapticFeedback) {
+            // Telegram разделяет методы impact и notification. 
+            // Warning - это уведомление, а не удар.
+            if(type === 'error' || type === 'success' || type === 'warning') {
+                tg.HapticFeedback.notificationOccurred(type);
+            } else {
+                tg.HapticFeedback.impactOccurred(type);
+            }
+        } else if(navigator.vibrate) {
+            navigator.vibrate(10);
+        }
+    } catch(e) {
+        // Игнорируем ошибки вибрации, чтобы не ломать приложение
+        console.error("Haptic error:", e);
+    }
 }
 
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
@@ -400,11 +413,14 @@ function toggleSelectAllReset() {
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
 
-// !!! ИСПРАВЛЕНО: ТОЛЬКО HTML ОКНО, НИКАКИХ NATIVE CONFIRM !!!
 function confirmReset() {
-    if(!state.resetSelectedTopics.length) return;
+    // Если темы не выбраны, ничего не делаем или показываем ошибку
+    if(!state.resetSelectedTopics.length) {
+        haptic('error');
+        return;
+    }
+    // ВАЖНО: haptic('warning') теперь корректно обрабатывается новой функцией haptic
     haptic('warning');
-    // Мы просто включаем отображение нашего модального окна
     state.showConfirmResetDialog = true;
     render(); 
 }
