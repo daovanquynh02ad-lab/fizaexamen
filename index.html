@@ -259,15 +259,6 @@ async function saveProgressToCloud() {
     isSaving = false;
 }
 
-async function resetProgress() {
-    if (!confirm('Вы уверены? Весь прогресс будет удален.')) return;
-    haptic('warning');
-    state.userProgress = {};
-    localStorage.removeItem(`imed_progress_${currentUserId}`);
-    saveProgressToCloud(); 
-    render(); 
-}
-
 function checkStateTransition() {
     if(!videoFinished && !accessError) return; 
     const intro=document.getElementById('intro-layer'), auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen'), app=document.getElementById('app');
@@ -397,25 +388,41 @@ function toggleSelectAllReset() {
     else state.resetSelectedTopics=[...availableTopics]; 
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
-async function confirmReset() {
+
+function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
     haptic('warning');
     if(!confirm(`Сбросить прогресс для ${state.resetSelectedTopics.length} тем?`)) return;
 
-    const topicsToReset = new Set(state.resetSelectedTopics);
+    // 1. Создаем новый объект прогресса
     const newProgress = {};
-    if (!state.userProgress) state.userProgress = {};
+    const topicsToRemove = new Set(state.resetSelectedTopics);
 
-    for (const qId in state.userProgress) {
-        const q = QUESTIONS_DATA.find(x => x.id == qId);
-        if (q && !topicsToReset.has(q.topic)) {
-            newProgress[qId] = state.userProgress[qId];
+    // 2. Проходимся по всем записям прогресса
+    for (const [id, prog] of Object.entries(state.userProgress)) {
+        // Находим вопрос, чтобы узнать его тему
+        const q = QUESTIONS_DATA.find(x => x.id == id);
+        
+        // Если вопрос существует И его тема в списке на удаление -> ПРОПУСКАЕМ (удаляем)
+        if (q && topicsToRemove.has(q.topic)) {
+            continue; 
         }
+        
+        // Иначе оставляем в новом прогрессе
+        newProgress[id] = prog;
     }
+
+    // 3. Обновляем состояние
     state.userProgress = newProgress;
-    await saveProgressToCloud();
+    state.resetSelectedTopics = []; // Очищаем выбор
+
+    // 4. Сначала обновляем UI (мгновенно для пользователя)
     toggleResetModal(false);
     render();
+    haptic('success');
+    
+    // 5. Потом сохраняем в облако (в фоне)
+    saveProgressToCloud();
 }
 
 function updateTopicListUI(mode) {
@@ -491,6 +498,22 @@ function startMode(mode, resume=false) {
     if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
     
     let q = getFilteredQuestions(mode);
+    
+    // ЛОГИКА ФИЛЬТРАЦИИ РЕШЕННЫХ ВОПРОСОВ
+    if (mode === 'quiz' || mode === 'cards') {
+        const unsolved = q.filter(question => {
+            const p = state.userProgress[question.id];
+            return !p || p.status !== 'correct'; // Оставляем только те, что НЕ решены или решены НЕВЕРНО
+        });
+        
+        // Если есть нерешенные вопросы - используем только их
+        if (unsolved.length > 0) {
+            q = unsolved;
+        }
+        // Если unsolved.length === 0, значит тема пройдена полностью. 
+        // В этом случае используем полный список (q) для повторения.
+    }
+
     if(!q.length){ alert("Нет вопросов!"); return; }
     
     if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
@@ -499,17 +522,7 @@ function startMode(mode, resume=false) {
     // Гарантируем, что userProgress не undefined
     if (!state.userProgress) state.userProgress = {};
 
-    // Ищем первый нерешенный
-    if (mode === 'quiz' || mode === 'cards') {
-        // ИСПРАВЛЕНИЕ: Ищем первый вопрос, который ВООБЩЕ не имеет записи в userProgress
-        // Это предотвращает откат к ошибочным ответам в середине теста
-        let firstUnsolved = q.findIndex(question => !state.userProgress[question.id]);
-        
-        if (firstUnsolved === -1) firstUnsolved = 0;
-        state.currentQuestionIndex = firstUnsolved;
-    } else {
-        state.currentQuestionIndex = 0;
-    }
+    state.currentQuestionIndex = 0;
     
     state.view = mode; // ДОБАВЛЕНО!
     state.quizFinished = false;
@@ -534,14 +547,14 @@ function loadStateForIndex(i) {
         return;
     }
 
-    // ИСПРАВЛЕНИЕ: Если режим "Работа над ошибками", мы НЕ загружаем историю.
-    // Мы хотим дать возможность ответить заново.
-    if (state.view === 'mistakes') {
+    // ИСПРАВЛЕНИЕ: Если режим "Тест", "Карточки" или "Работа над ошибками", мы НЕ загружаем историю.
+    // Мы хотим дать возможность ответить заново, даже если вопрос уже встречался.
+    if (['quiz', 'cards', 'mistakes'].includes(state.view)) {
         resetQuestionState();
         return;
     }
 
-    // 2. Иначе проверяем глобальную историю (для обычного теста)
+    // 2. Иначе проверяем глобальную историю (на всякий случай для других режимов, если будут)
     const history = state.userProgress && state.userProgress[q.id];
     if (history && history.selected) {
         state.selectedOptions = history.selected;
