@@ -49,7 +49,7 @@
         .layout-content {
             flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
-            padding-bottom: 140px !important; 
+            padding-bottom: 250px !important; 
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
@@ -136,8 +136,15 @@
 </div>
 
 <script>
+// !!! ЗАМЕНИТЕ ЭТУ ССЫЛКУ НА СВОЮ НОВУЮ ССЫЛКУ ИЗ APPS SCRIPT !!!
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
-let accessData = null; let videoFinished = false; let accessError = null;
+
+let accessData = null; 
+let videoFinished = false; 
+let accessError = null;
+let currentUserId = null; // ID пользователя для сохранения
+let isSaving = false; // Флаг сохранения
+
 const tg = window.Telegram.WebApp;
 
 try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
@@ -167,24 +174,88 @@ function finishVideo() { videoFinished = true; checkStateTransition(); }
 
 async function performAccessCheck() {
     if(typeof physiology_questions==='undefined'){ accessError={type:'file',msg:'Файл questions.js не найден.'};checkStateTransition();return;}
-    const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
-    if(window.location.protocol==='file:'){ accessData={allowed:true};processQuestions();checkStateTransition();return;}
-    if(!userId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
     
-    const ck = `imed_access_v1_${userId}`; 
+    currentUserId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
+    
+    if(window.location.protocol==='file:'){ accessData={allowed:true, progress: {}};processQuestions();checkStateTransition();return;}
+
+    if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
+    
+    const ck = `imed_access_v2_${currentUserId}`; 
+
     try{
         const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
-        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${userId}`,{signal:ctrl.signal});
+        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}`,{signal:ctrl.signal});
         const data=await res.json();
-        if(data.allowed){ accessData=data; localStorage.setItem(ck,JSON.stringify(data)); processQuestions(); }
-        else { localStorage.removeItem(ck); accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'}; }
+        
+        if(data.allowed){ 
+            accessData=data; 
+            // Если с сервера пришел прогресс, объединяем его с локальным (приоритет сервера)
+            if (data.progress) {
+                // Если в локальном кэше есть данные новее (теоретически), можно мержить, 
+                // но для надежности берем облако как истину.
+                state.userProgress = data.progress;
+            } else {
+                // Если с сервера пришло пусто, пробуем достать из локалки (на случай оффлайна ранее)
+                const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
+                if (localP) state.userProgress = JSON.parse(localP);
+            }
+            
+            localStorage.setItem(ck, JSON.stringify(data));
+            localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
+
+            processQuestions(); 
+        } else {
+            localStorage.removeItem(ck);
+            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
+        }
     } catch(e){ 
+        // Ошибка сети -> работаем в оффлайне с кэшем
         const c = localStorage.getItem(ck);
-        if(c){ try{ const p=JSON.parse(c); if(p.allowed){ accessData=p; processQuestions(); } } catch(err){ localStorage.removeItem(ck); } }
+        const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
+        
+        if(c){ 
+            try{ 
+                const p=JSON.parse(c); 
+                if(p.allowed){ 
+                    accessData=p; 
+                    if (localP) state.userProgress = JSON.parse(localP);
+                    processQuestions(); 
+                } 
+            } catch(err){ localStorage.removeItem(ck); } 
+        }
         if (!accessData) accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
     }
     checkStateTransition();
 }
+
+// --- СОХРАНЕНИЕ ПРОГРЕССА В ОБЛАКО ---
+async function saveProgressToCloud() {
+    if (!currentUserId || !accessData || isSaving) return;
+    isSaving = true;
+
+    // Сначала сохраняем локально (мгновенно)
+    localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
+
+    // Теперь пробуем отправить в облако
+    try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Важно для Google Apps Script
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: currentUserId,
+                progress: state.userProgress
+            })
+        });
+        console.log('Progress saved to cloud');
+    } catch (e) {
+        console.warn('Failed to save progress to cloud (offline?)');
+    } finally {
+        isSaving = false;
+    }
+}
+
 
 function checkStateTransition() {
     if(!videoFinished && !accessError) return; 
@@ -204,6 +275,7 @@ function checkStateTransition() {
     }
 }
 
+// ДАННЫЕ
 const TOPIC_MAP = [
     { pages: 3,  title: "1. Биологические мембраны и транспорт веществ" },       
     { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" },                 
@@ -295,12 +367,49 @@ function updateTopicListUI() {
     const list=document.getElementById('topics-list'); if(!list)return;
     list.querySelectorAll('button[data-topic]').forEach(btn => {
         const t=btn.getAttribute('data-topic'), sel=state.selectedTopics.includes(t), icon=btn.querySelector('.icon-area');
-        if(sel) { btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between gap-3 group btn-click bg-black text-white dark:bg-white dark:text-black"; if(icon) icon.innerHTML='<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>'; }
-        else { btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between gap-3 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"; if(icon) icon.innerHTML=''; }
+        
+        // --- ПРОГРЕСС-БАР ДЛЯ ТЕМЫ ---
+        const totalInTopic = QUESTIONS_DATA.filter(q => q.topic === t).length;
+        const correctInTopic = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
+        const progressPct = totalInTopic > 0 ? Math.round((correctInTopic / totalInTopic) * 100) : 0;
+        
+        let progressHtml = `
+            <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
+                <div class="h-full bg-emerald-500 rounded-full" style="width: ${progressPct}%"></div>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                <span>Прогресс</span>
+                <span>${progressPct}%</span>
+            </div>
+        `;
+        
+        if(sel) { 
+            btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-black text-white dark:bg-white dark:text-black border border-transparent"; 
+            if(icon) icon.innerHTML='<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3"></i>';
+            // В активном состоянии прогресс бар можно сделать чуть прозрачнее или другого цвета
+             progressHtml = `
+                <div class="w-full h-1.5 bg-white/20 dark:bg-black/20 rounded-full mt-1 overflow-hidden">
+                    <div class="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full" style="width: ${progressPct}%"></div>
+                </div>
+                <div class="text-[10px] text-white/60 dark:text-black/60 mt-0.5 flex justify-between">
+                    <span>Прогресс</span>
+                    <span>${progressPct}%</span>
+                </div>
+            `;
+        }
+        else { 
+            btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"; 
+            if(icon) icon.innerHTML=''; 
+        }
+        
+        // Вставляем прогресс бар внутрь кнопки
+        const contentDiv = btn.querySelector('.topic-content');
+        if(contentDiv) contentDiv.innerHTML = `<span class="block text-wrap leading-tight pr-6 mb-1">${t}</span> ${progressHtml}`;
     });
     const apply=document.getElementById('apply-btn'); if(apply) apply.innerText=`Применить (${state.selectedTopics.length})`;
     lucide.createIcons();
 }
+
 function updateSelectAllButtonUI() {
     const btn=document.getElementById('select-all-btn'); if(!btn)return;
     const all=state.selectedTopics.length===availableTopics.length;
@@ -339,7 +448,12 @@ function checkAnswer() {
     const sel=[...state.selectedOptions].sort().toString(), corr=[...q.correctIndices].sort().toString();
     state.lastResult=(sel===corr); haptic(state.lastResult?'success':'error');
     state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1 };
-    saveCurrentState(); render();
+    saveCurrentState();
+    
+    // !!! СОХРАНЕНИЕ В ОБЛАКО ПОСЛЕ ОТВЕТА !!!
+    saveProgressToCloud();
+    
+    render();
 }
 function nextQuestion() {
     haptic('light'); saveCurrentState();
@@ -354,6 +468,7 @@ function prevQuestion() {
 }
 function goHome() {
     haptic('medium');
+    saveProgressToCloud(); // Сохраняем при выходе
     if(['quiz','cards','mistakes'].includes(state.view) && !state.quizFinished && state.playableQuestions.length) state.resumeState={mode:state.view, index:state.currentQuestionIndex, questions:state.playableQuestions};
     else state.resumeState=null;
     state.view='menu'; render();
@@ -438,7 +553,6 @@ function renderLearnContent() {
                 </div>
                 <div class="divide-y divide-black dark:divide-slate-800">
                     ${q.options.map((opt, i) => {
-                        // ФИКС: Не рендерим пустые строки
                         if(!opt||!opt.trim())return'';
                         const isC=q.correctIndices.includes(i); let bg="bg-white dark:bg-black"; if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] dark:bg-yellow-700 dark:text-white";
                         return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bg}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bg}">${opt}</div></div>`;
@@ -460,9 +574,7 @@ function renderQuizContent() {
             <h3 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${q.question}</h3>
             <div class="space-y-3">
                 ${q.options.map((opt, i) => {
-                    // ФИКС: Не рендерим пустые кнопки
                     if(!opt||!opt.trim())return'';
-
                     let cls="w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative btn-click ";
                     if(!state.isAnswerChecked) { if(state.selectedOptions.includes(i)) cls+="border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.01]"; else cls+="border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900"; }
                     else {
@@ -554,13 +666,60 @@ function renderFilterModal() {
     if(!state.showFilterModal) return '';
     const allSel=state.selectedTopics.length===availableTopics.length;
     const counts={}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
+    
+    // !!! НОВЫЙ РЕНДЕР МОДАЛКИ С ПРОГРЕСС-БАРАМИ !!!
+    // Логика формирования списка тем
+    const topicListHTML = availableTopics.map(t => {
+        const sel = state.selectedTopics.includes(t);
+        const count = counts[t] || 0;
+        
+        // Расчет прогресса
+        const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
+        const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
+        const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
+        
+        // Стили
+        let btnClass, iconHtml, progressHtml;
+        
+        if (sel) {
+            btnClass = "bg-black text-white dark:bg-white dark:text-black";
+            iconHtml = '<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0 absolute top-3 right-3"></i>';
+            progressHtml = `
+                <div class="w-full h-1.5 bg-white/20 dark:bg-black/20 rounded-full mt-1 overflow-hidden">
+                    <div class="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full" style="width: ${progress}%"></div>
+                </div>
+                <div class="text-[10px] text-white/60 dark:text-black/60 mt-0.5 flex justify-between">
+                    <span>Прогресс</span><span>${progress}%</span>
+                </div>`;
+        } else {
+            btnClass = "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300";
+            iconHtml = '';
+            progressHtml = `
+                <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full" style="width: ${progress}%"></div>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                    <span>Прогресс</span><span>${progress}%</span>
+                </div>`;
+        }
+
+        return `
+        <button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${btnClass} relative">
+            <div class="topic-content w-full">
+                <span class="block text-wrap leading-tight pr-6 mb-1">${t}</span>
+                ${progressHtml}
+            </div>
+            <div class="icon-area">${iconHtml}</div>
+        </button>`;
+    }).join('');
+
     return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
             <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
             <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{const sel=state.selectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all gap-3 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}"><div class="flex items-center min-w-0 flex-1"><span class="block text-wrap leading-tight pr-2">${t}</span><span class="opacity-60 font-normal ml-auto whitespace-nowrap text-xs mt-1">(${counts[t]||0})</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>':''}</div></button>`}).join('')}
+                ${topicListHTML}
             </div>
             <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить (${state.selectedTopics.length})</button>
         </div>
