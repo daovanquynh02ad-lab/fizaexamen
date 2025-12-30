@@ -33,9 +33,10 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ХЕДЕР --- */
+        /* --- ХЕДЕР: ГАРАНТИРОВАННЫЙ ОТСТУП ОТ КНОПОК ТГ --- */
         .layout-header {
             flex-shrink: 0; width: 100%;
+            /* ДОБАВИЛ + 40px К СИСТЕМНОМУ ОТСТУПУ */
             padding-top: calc(env(safe-area-inset-top) + 40px);
             padding-bottom: 12px;
             padding-left: 16px; padding-right: 16px;
@@ -49,7 +50,7 @@
         .layout-content {
             flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
-            padding-bottom: 140px !important;
+            padding-bottom: 140px !important; /* Место под подвал */
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
@@ -64,10 +65,14 @@
         }
         .dark .layout-footer { border-top: 1px solid rgba(255,255,255,0.1); }
 
-        /* КАРТОЧКИ */
+        /* КАРТОЧКИ (FIX IOS) */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
-        .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translate3d(0,0,0); }
+        .backface-hidden { 
+            -webkit-backface-visibility: hidden; 
+            backface-visibility: hidden; 
+            transform: translate3d(0,0,0); 
+        }
         .rotate-y-180 { transform: rotateY(180deg); }
 
         /* КЛИК */
@@ -80,14 +85,14 @@
         @keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         .animate-pulse-text { animation: pulseText 2s infinite ease-in-out; }
 
-        /* ЭКРАНЫ */
+        /* ЗАГРУЗКА И ОШИБКИ */
         #intro-layer, #auth-screen, #block-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         #intro-layer { background: #000; }
-        #auth-screen, #block-screen { background-color: inherit; }
+        #auth-screen, #block-screen { background-color: inherit; } /* Наследует тему */
         
         #intro-video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
         #start-text { z-index: 10000; cursor: pointer; position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
@@ -114,15 +119,15 @@
         </div>
     </div>
     
-    <!-- ЗАГРУЗКА -->
+    <!-- ЗАГРУЗКА (Спиннер) -->
     <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
         <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
         <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
 
-    <!-- БЛОКИРОВКА -->
+    <!-- БЛОКИРОВКА (Доступ закрыт) -->
     <div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center">
-        <!-- Контент -->
+        <!-- Контент вставляется JS -->
     </div>
 
     <!-- ПРИЛОЖЕНИЕ -->
@@ -154,7 +159,7 @@ function haptic(type='light') {
     } else if(navigator.vibrate) navigator.vibrate(10);
 }
 
-// Свайп "назад"
+// Свайп "назад" (Глобальный)
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
 document.addEventListener('touchend', (e)=>{if(!window.sw)return;const ex=e.changedTouches[0].clientX;const ey=e.changedTouches[0].clientY;if((ex-window.sx)>60 && Math.abs(ey-window.sy)<50){haptic('medium');goHome();}window.sw=false},{passive:true});
 
@@ -164,7 +169,7 @@ async function userClickedStart() {
     const txt = document.getElementById('start-text'); if(txt) txt.remove();
     const vid=document.getElementById('intro-video');
     
-    // Запускаем проверку доступа СРАЗУ
+    // Запускаем проверку доступа ПАРАЛЛЕЛЬНО с видео
     performAccessCheck();
 
     let played = false;
@@ -180,7 +185,7 @@ async function userClickedStart() {
 
 function finishVideo() { videoFinished = true; checkStateTransition(); }
 
-// --- ПРОВЕРКА ДОСТУПА (ИСПРАВЛЕНО: СНАЧАЛА СЕТЬ) ---
+// --- ПРОВЕРКА ДОСТУПА ---
 async function performAccessCheck() {
     if(typeof physiology_questions==='undefined'){ 
         accessError={type:'file',msg:'Файл questions.js не найден.'};
@@ -190,7 +195,7 @@ async function performAccessCheck() {
     
     const userId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
     
-    // Локальный тест
+    // Локальный тест (для разработки)
     if(window.location.protocol==='file:'){ accessData={allowed:true};processQuestions();checkStateTransition();return;}
 
     if(!userId){ 
@@ -199,7 +204,7 @@ async function performAccessCheck() {
         return;
     }
     
-    const ck = `imed_access_v1_${userId}`;
+    const ck = `imed_access_v1_${userId}`; 
 
     // 1. Сначала пробуем СЕРВЕР (чтобы поймать удаление ID)
     try {
@@ -208,18 +213,15 @@ async function performAccessCheck() {
         const data=await res.json();
         
         if(data.allowed){ 
-            // ДОСТУП ЕСТЬ
             accessData=data; 
             localStorage.setItem(ck,JSON.stringify(data)); 
             processQuestions(); 
         } else {
-            // ДОСТУП ЗАКРЫТ (ID удален)
-            localStorage.removeItem(ck); // Удаляем кэш
-            accessError={type:'denied', msg:'Доступ к приложению ограничен. Пожалуйста, обратитесь к администратору для восстановления.'};
+            localStorage.removeItem(ck);
+            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
         }
     } catch(e) { 
         // 2. Если СЕТЬ УПАЛА, только тогда смотрим КЭШ
-        console.log("Network error, checking cache...");
         const c = localStorage.getItem(ck);
         if(c){ 
             try{
@@ -231,18 +233,15 @@ async function performAccessCheck() {
             } catch(err){ localStorage.removeItem(ck); } 
         }
         
-        // Если и в кэше пусто - ошибка сети
         if (!accessData) {
-            accessError={type:'network', msg:'Не удалось подключиться к серверу. Проверьте интернет.'}; 
+            accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
         }
     }
-    
     checkStateTransition();
 }
 
 // --- УПРАВЛЕНИЕ ЭКРАНАМИ ---
 function checkStateTransition() {
-    // Ждем окончания видео (если нет критической ошибки)
     if(!videoFinished && !accessError) return; 
     
     const intro=document.getElementById('intro-layer');
@@ -250,14 +249,12 @@ function checkStateTransition() {
     const block=document.getElementById('block-screen');
     const app=document.getElementById('app');
 
-    // Если видео закончилось, но проверка еще идет -> показываем спиннер
     if (videoFinished && !accessData && !accessError) {
         if(intro) intro.style.display='none';
         auth.classList.remove('hidden-force');
         return;
     }
 
-    // Если ОШИБКА (Доступ закрыт или Сеть)
     if(accessError){ 
         if(intro) intro.style.display='none'; 
         auth.classList.add('hidden-force');
@@ -294,7 +291,6 @@ function checkStateTransition() {
         return; 
     }
 
-    // УСПЕХ
     if(accessData){
         if(intro){ 
             intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; 
@@ -312,6 +308,7 @@ function checkStateTransition() {
     }
 }
 
+// ДАННЫЕ
 const TOPIC_MAP = [
     { pages: 3,  title: "1. Биологические мембраны и транспорт веществ" },       
     { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" },                 
@@ -370,7 +367,16 @@ function processQuestions() {
     QUESTIONS_DATA = physiology_questions.map((q, i) => {
         const t = RANGES.find(r => i >= r.start && i < r.end) || RANGES[RANGES.length-1];
         let correct = []; if (q.answer) correct = String(q.answer).split(',').map(s => parseInt(s.trim())-1).filter(n=>!isNaN(n));
-        return { id: q.id, topic: t?t.title:"Общее", question: escapeHtml(q.question), options: (q.options||[]).map(o=>escapeHtml(o.replace(/^\d+\)\s*/,''))), correctIndices: correct, image: q.image };
+        return { 
+            id: q.id, 
+            topic: t?t.title:"Общее", 
+            question: escapeHtml(q.question), 
+            // !!! ФИКС ПУСТЫХ КНОПОК !!!
+            // Очищаем текст от номеров, но если он станет пустым, эта опция позже отфильтруется при рендере
+            options: (q.options||[]).map(o=>escapeHtml(o.replace(/^[\d\)\.\s]+/, ''))), 
+            correctIndices: correct, 
+            image: q.image 
+        };
     });
     availableTopics = [...new Set(QUESTIONS_DATA.map(q => q.topic))];
     state.selectedTopics = [...availableTopics];
@@ -547,6 +553,9 @@ function renderLearnContent() {
                 </div>
                 <div class="divide-y divide-black dark:divide-slate-800">
                     ${q.options.map((opt, i) => {
+                        // !!! ФИКС: НЕ РЕНДЕРИМ ПУСТЫЕ ОТВЕТЫ !!!
+                        if (!opt || !opt.trim()) return '';
+
                         const isC=q.correctIndices.includes(i); let bg="bg-white dark:bg-black"; if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] dark:bg-yellow-700 dark:text-white";
                         return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bg}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bg}">${opt}</div></div>`;
                     }).join('')}
@@ -567,6 +576,9 @@ function renderQuizContent() {
             <h3 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${q.question}</h3>
             <div class="space-y-3">
                 ${q.options.map((opt, i) => {
+                    // !!! ФИКС: НЕ РЕНДЕРИМ ПУСТЫЕ КНОПКИ !!!
+                    if (!opt || !opt.trim()) return '';
+
                     let cls="w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative btn-click ";
                     if(!state.isAnswerChecked) { if(state.selectedOptions.includes(i)) cls+="border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.01]"; else cls+="border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900"; }
                     else {
@@ -615,7 +627,11 @@ function renderCardsContent() {
                          <div class="w-full flex flex-col gap-4 flex-1 overflow-y-auto no-scrollbar justify-start">
                              ${imageBlock}
                              <h3 class="text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${q.question}</h3>
-                             <div class="w-full space-y-2">${q.options.map(opt=>`<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`).join('')}</div>
+                             <div class="w-full space-y-2">${q.options.map(opt=>{
+                                 // ФИКС КАРТОЧЕК
+                                 if(!opt||!opt.trim())return'';
+                                 return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`
+                             }).join('')}</div>
                          </div>
                          <div class="mt-auto w-full text-center pt-2"><span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа</span></div>
                     </div>
