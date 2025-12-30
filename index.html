@@ -45,11 +45,12 @@
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КОНТЕНТ --- */
+        /* --- КОНТЕНТ (ИСПРАВЛЕННЫЙ ОТСТУП) --- */
         .layout-content {
             flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
-            padding-bottom: 140px !important; 
+            /* УВЕЛИЧЕННЫЙ ОТСТУП, ЧТОБЫ ТЕКСТ НЕ ПЕРЕКРЫВАЛСЯ */
+            padding-bottom: 180px !important; 
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
@@ -74,12 +75,11 @@
         }
         .rotate-y-180 { transform: rotateY(180deg); }
         
-        /* Скролл внутри карточки */
         .card-scroll {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
-            overscroll-behavior-y: contain; /* Чтобы скролл не передавался родителю */
-            touch-action: pan-y; /* Разрешаем вертикальный скролл браузеру */
+            overscroll-behavior-y: contain;
+            touch-action: pan-y;
         }
         .card-scroll::-webkit-scrollbar { display: none; }
 
@@ -119,7 +119,6 @@
 <body class="bg-slate-50 text-slate-900 transition-colors duration-300 selection:bg-[#FFD700] selection:text-black">
 
 <div id="mobile-wrapper" class="bg-slate-50 dark:bg-black">
-    <!-- ИНТРО -->
     <div id="intro-layer">
         <video id="intro-video" playsinline preload="auto" muted><source src="intro.mp4" type="video/mp4"></video>
         <div id="start-text" onclick="userClickedStart()">
@@ -127,34 +126,22 @@
         </div>
     </div>
     
-    <!-- ЗАГРУЗКА -->
     <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
         <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
         <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
 
-    <!-- БЛОКИРОВКА -->
     <div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center"></div>
 
-    <!-- ПРИЛОЖЕНИЕ -->
     <div id="app" class="hidden-force"></div>
 </div>
 
 <script>
-// --- КОНФИГУРАЦИЯ ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
-
-// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
-let accessData = null; 
-let videoFinished = false; 
-let accessError = null; 
+let accessData = null; let videoFinished = false; let accessError = null;
 const tg = window.Telegram.WebApp;
 
-try { 
-    tg.expand(); tg.requestFullscreen(); 
-    if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; 
-    tg.setHeaderColor('#ffffff'); 
-} catch(e){}
+try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
 
 function haptic(type='light') {
     if(tg.HapticFeedback) {
@@ -218,7 +205,6 @@ function checkStateTransition() {
     }
 }
 
-// ДАННЫЕ
 const TOPIC_MAP = [
     { pages: 3,  title: "1. Биологические мембраны и транспорт веществ" },       
     { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" },                 
@@ -281,10 +267,7 @@ function processQuestions() {
             id: q.id, 
             topic: t?t.title:"Общее", 
             question: escapeHtml(q.question), 
-            // ИСПРАВЛЕННАЯ РЕГУЛЯРКА: удаляет цифру только если за ней идет скобка или точка.
-            // 1) Ответ -> Ответ
-            // 15% -> 15%
-            options: (q.options||[]).map(o=>escapeHtml(o.replace(/^\d+[\)\.]\s*/, ''))), 
+            options: (q.options||[]).map(o=>escapeHtml(o.replace(/^[\d\)\.\s]+/, ''))), 
             correctIndices: correct, 
             image: q.image 
         };
@@ -470,7 +453,7 @@ function renderQuizContent() {
     const pct=((state.currentQuestionIndex+1)/state.playableQuestions.length)*100;
     return `<div class="flex flex-col h-full animate-fade-in relative">
         <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 shrink-0"><div class="h-full bg-black dark:bg-white transition-all duration-300" style="width:${pct}%"></div></div>
-        <div class="p-4 w-full max-w-xl mx-auto">
+        <div class="p-4 w-full max-w-xl mx-auto pb-10">
             <div class="flex justify-between items-start mb-4 gap-4"><span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 leading-tight">${q.topic}</span><span class="text-xs font-black text-slate-300 dark:text-slate-600 whitespace-nowrap mt-1">${state.currentQuestionIndex+1} / ${state.playableQuestions.length}</span></div>
             ${q.image?`<div class="mb-4 w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700"><img src="${q.image}" class="w-full h-full object-contain"></div>`:''}
             <h3 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6 leading-snug">${q.question}</h3>
@@ -486,8 +469,8 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
-            <!-- РАСПОРКА ДЛЯ СКРОЛЛА -->
-            <div class="h-32 w-full shrink-0"></div>
+            <!-- РАСПОРКА ДЛЯ СКРОЛЛА: ТЕПЕРЬ ОТВЕТЫ ВСЕГДА ВЫЛЕЗАЮТ ИЗ ПОД КНОПКИ -->
+            <div class="h-[100px] w-full shrink-0"></div>
         </div>
     </div>`;
 }
@@ -512,39 +495,24 @@ function renderQuizFinished() {
     </div>`;
 }
 
-// -----------------------------------------------------------
-// ИСПРАВЛЕННАЯ ЛОГИКА КАРТОЧЕК:
-// Скролл - внутри, свайп - горизонтально, клик - переворот
-// -----------------------------------------------------------
 function renderCardsContent() {
     if(!state.playableQuestions.length) return renderQuizFinished();
     const q=state.playableQuestions[state.currentQuestionIndex];
     const correctText=q.correctIndices.map(i=>q.options[i]).join('<br><br>');
     const imageBlock=q.image?`<div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0"><img src="${q.image}" class="w-full h-full object-contain"></div>`:'';
-    
-    // Увеличили высоту карточки (max-w-md, flex-1)
     return `<div class="flex flex-col h-full p-4 overflow-hidden select-none animate-fade-in relative">
         <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">${state.currentQuestionIndex+1} / ${state.playableQuestions.length}</div>
-        
-        <div class="flex-1 relative perspective-1000 max-w-md mx-auto w-full mb-4">
-            <div id="flashcard" class="w-full h-full relative" onclick="handleCardClick(event)">
+        <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full mb-4">
+            <div id="flashcard" class="w-full h-full relative" onclick="handleCardClick()">
                 <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped?'rotate-y-180':''}">
                     <!-- FRONT -->
                     <div class="absolute inset-0 backface-hidden flex flex-col p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800 items-start overflow-hidden">
                          <div class="w-full flex justify-center mb-2"><div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${q.topic}</div></div>
-                         
-                         <!-- СКРОЛЛ ВНУТРИ -->
                          <div class="w-full flex flex-col gap-4 flex-1 card-scroll justify-start">
                              ${imageBlock}
                              <h3 class="text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${q.question}</h3>
-                             <div class="w-full space-y-2 pb-4">
-                                ${q.options.map(opt=>{
-                                    if(!opt||!opt.trim())return'';
-                                    return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`
-                                }).join('')}
-                             </div>
+                             <div class="w-full space-y-2 pb-4">${q.options.map(opt=>{if(!opt||!opt.trim())return'';return`<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`}).join('')}</div>
                          </div>
-                         
                          <div class="mt-auto w-full text-center pt-2 border-t border-slate-100 dark:border-slate-800"><span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа</span></div>
                     </div>
                     <!-- BACK -->
@@ -585,49 +553,36 @@ function renderFilterModal() {
     </div>`;
 }
 
-// -----------------------------------------------------------
-// УЛУЧШЕННАЯ ОБРАБОТКА ЖЕСТОВ (Свайп vs Скролл)
-// -----------------------------------------------------------
 function initCardEvents() {
     const card = document.getElementById('flashcard');
     if (!card) return;
-    
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false;
-    let isScrolling = false;
+    let startX = 0; let startY = 0;
+    let isSwiping = false; let isScrolling = false;
 
     card.style.transform = 'translateX(0px) rotate(0deg)';
     card.style.transition = 'transform 0.3s ease-out';
 
     card.ontouchstart = (e) => {
         if (state.animState !== 'idle') return;
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        isSwiping = false;
-        isScrolling = false;
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        isSwiping = false; isScrolling = false;
         card.style.transition = 'none';
     };
 
     card.ontouchmove = (e) => {
         if (state.animState !== 'idle') return;
-        if (isScrolling) return; // Если уже скроллим вертикально - не двигаем карту
+        if (isScrolling) return;
 
         const currentX = e.touches[0].clientX;
         const currentY = e.touches[0].clientY;
         const diffX = currentX - startX;
         const diffY = currentY - startY;
 
-        // Если движение больше вертикальное -> это скролл текста
-        if (Math.abs(diffY) > Math.abs(diffX)) {
-            isScrolling = true;
-            return;
-        }
+        if (Math.abs(diffY) > Math.abs(diffX)) { isScrolling = true; return; }
 
-        // Если движение больше горизонтальное -> это свайп карты
         if (Math.abs(diffX) > 10) {
             isSwiping = true;
-            e.preventDefault(); // Блокируем скролл страницы
+            if(e.cancelable) e.preventDefault();
             state.swipeX = diffX;
             card.style.transform = `translateX(${diffX}px) rotate(${diffX * 0.05}deg)`;
         }
@@ -635,25 +590,14 @@ function initCardEvents() {
 
     card.ontouchend = (e) => {
         if (state.animState !== 'idle') return;
-        
         if (isSwiping) {
-            if (Math.abs(state.swipeX) > 100) {
-                animateCard(state.swipeX > 0 ? 'prev' : 'next');
-            } else {
-                card.style.transition = 'transform 0.3s ease-out';
-                card.style.transform = 'translateX(0px) rotate(0deg)';
-            }
+            if (Math.abs(state.swipeX) > 100) animateCard(state.swipeX > 0 ? 'prev' : 'next');
+            else { card.style.transition = 'transform 0.3s ease-out'; card.style.transform = 'translateX(0px) rotate(0deg)'; }
         }
     };
 }
 
-function handleCardClick(e) {
-    // Если клик был не после свайпа, переворачиваем
-    if (state.animState === 'idle' && Math.abs(state.swipeX) < 5) {
-        toggleFlip();
-    }
-    state.swipeX = 0; // Сброс
-}
+function handleCardClick() { if (state.animState === 'idle') toggleFlip(); }
 
 function animateCard(dir) {
     const card = document.getElementById('flashcard');
