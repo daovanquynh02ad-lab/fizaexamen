@@ -3,6 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- 1. ЗАПРЕТ КЭШИРОВАНИЯ HTML СТРАНИЦЫ -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title>Imed</title>
     
     <link rel="manifest" href="manifest.json">
@@ -13,7 +19,12 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Noto+Serif:wght@700&display=swap" rel="stylesheet">
 
-    <script src="questions.js"></script>
+    <!-- 2. АВТОМАТИЧЕСКИЙ СБРОС КЭША СКРИПТОВ -->
+    <script>
+        // Этот код добавляет к questions.js уникальную метку времени.
+        // Телеграм будет думать, что это новый файл при каждом запуске.
+        document.write('<script src="questions.js?v=' + Date.now() + '"><\/script>');
+    </script>
 
     <style>
         /* --- БАЗА --- */
@@ -389,11 +400,11 @@ function toggleSelectAllReset() {
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
 
-// !!! НОВАЯ ЛОГИКА СБРОСА (БЕЗ NATIVE CONFIRM) !!!
+// !!! ИСПРАВЛЕНО: ТОЛЬКО HTML ОКНО, НИКАКИХ NATIVE CONFIRM !!!
 function confirmReset() {
     if(!state.resetSelectedTopics.length) return;
     haptic('warning');
-    // Вместо системного confirm вызываем отрисовку нашего модального окна
+    // Мы просто включаем отображение нашего модального окна
     state.showConfirmResetDialog = true;
     render(); 
 }
