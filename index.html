@@ -499,33 +499,41 @@ function renderCardsContent() {
     if(!state.playableQuestions.length) return renderQuizFinished();
     const q=state.playableQuestions[state.currentQuestionIndex];
     const correctText=q.correctIndices.map(i=>q.options[i]).join('<br><br>');
-    const imageBlock=q.image?`<div class="mb-4 w-full h-24 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0"><img src="${q.image}" class="w-full h-full object-contain"></div>`:'';
+    // Изменено: max-h-24 вместо фиксированной h-24, чтобы маленькие картинки не занимали лишнее место
+    const imageBlock=q.image?`<div class="mb-3 w-full max-h-32 h-auto rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0"><img src="${q.image}" class="w-full h-full object-contain"></div>`:'';
+    
     return `<div class="flex flex-col h-full p-4 overflow-hidden select-none animate-fade-in relative">
         <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">${state.currentQuestionIndex+1} / ${state.playableQuestions.length}</div>
         <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full mb-4">
             <div id="flashcard" class="w-full h-full relative" onclick="handleCardClick()">
                 <div id="card-inner" class="w-full h-full relative preserve-3d cursor-pointer transition-transform duration-500 ${state.isFlipped?'rotate-y-180':''}">
                     <!-- FRONT -->
-                    <div class="absolute inset-0 backface-hidden flex flex-col p-4 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800 items-start overflow-hidden">
-                         <div class="w-full flex justify-center mb-2"><div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${q.topic}</div></div>
-                         <div class="w-full flex flex-col gap-4 flex-1 card-scroll justify-start">
+                    <!-- Изменено: p-3 (было p-4) для экономии места по краям -->
+                    <div class="absolute inset-0 backface-hidden flex flex-col p-3 sm:p-5 rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800 items-start overflow-hidden">
+                         <div class="w-full flex justify-center mb-2 shrink-0"><div class="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">${q.topic}</div></div>
+                         
+                         <!-- ВАЖНО: добавлен min-h-0, чтобы скролл работал корректно внутри флекс-контейнера, и gap-2 вместо gap-4 -->
+                         <div class="w-full flex flex-col gap-2 flex-1 card-scroll justify-start min-h-0">
                              ${imageBlock}
-                             <h3 class="text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${q.question}</h3>
-                             <div class="w-full space-y-2 pb-4">${q.options.map(opt=>{if(!opt||!opt.trim())return'';return`<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left">${opt}</div>`}).join('')}</div>
+                             <!-- Изменено: text-sm (был text-base) для длинных вопросов -->
+                             <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug text-left">${q.question}</h3>
+                             <!-- Изменено: уменьшены отступы между опциями (space-y-1.5) и внутри опций (p-2.5) -->
+                             <div class="w-full space-y-1.5 pb-4">${q.options.map(opt=>{if(!opt||!opt.trim())return'';return`<div class="w-full p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left leading-tight">${opt}</div>`}).join('')}</div>
                          </div>
-                         <div class="mt-auto w-full text-center pt-2 border-t border-slate-100 dark:border-slate-800"><span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа</span></div>
+                         
+                         <div class="mt-auto w-full text-center pt-2 border-t border-slate-100 dark:border-slate-800 shrink-0"><span class="text-slate-400 text-[10px] font-bold flex items-center justify-center gap-1 opacity-50"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Нажми для ответа</span></div>
                     </div>
                     <!-- BACK -->
                     <div class="absolute inset-0 backface-hidden bg-black dark:bg-slate-800 p-8 flex flex-col items-center justify-center text-center rounded-[2rem] shadow-2xl rotate-y-180 border-2 border-slate-100 dark:border-slate-600">
-                        <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white">Правильный ответ</h3>
-                        <div class="flex-1 flex flex-col items-center justify-center w-full card-scroll"><div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">${correctText}</div></div>
+                        <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white shrink-0">Правильный ответ</h3>
+                        <!-- Добавлен min-h-0 для скролла длинных ответов -->
+                        <div class="flex-1 flex flex-col items-center justify-center w-full card-scroll min-h-0"><div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">${correctText}</div></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>`;
 }
-
 function renderCardsFooter() {
     if(!state.playableQuestions.length) return '';
     return `<div class="layout-footer bg-slate-50/90 dark:bg-black/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
