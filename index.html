@@ -501,10 +501,10 @@ function startMode(mode, resume=false) {
 
     // Ищем первый нерешенный
     if (mode === 'quiz' || mode === 'cards') {
-        let firstUnsolved = q.findIndex(question => {
-            const p = state.userProgress[question.id];
-            return !p || (p.status !== 'correct');
-        });
+        // ИСПРАВЛЕНИЕ: Ищем первый вопрос, который ВООБЩЕ не имеет записи в userProgress
+        // Это предотвращает откат к ошибочным ответам в середине теста
+        let firstUnsolved = q.findIndex(question => !state.userProgress[question.id]);
+        
         if (firstUnsolved === -1) firstUnsolved = 0;
         state.currentQuestionIndex = firstUnsolved;
     } else {
@@ -522,17 +522,26 @@ function startMode(mode, resume=false) {
 
 function resetQuestionState() { state.selectedOptions=[]; state.isAnswerChecked=false; state.lastResult=false; state.isFlipped=false; state.swipeX=0; state.animState='idle'; }
 function saveCurrentState() { state.sessionAnswers[state.currentQuestionIndex] = { selectedOptions: [...state.selectedOptions], isAnswerChecked: state.isAnswerChecked, lastResult: state.lastResult }; }
+
 function loadStateForIndex(i) {
     const q = state.playableQuestions[i];
     if (!q) return resetQuestionState();
     
+    // 1. Проверяем сессию (текущий прогон)
     if (state.sessionAnswers[i]) {
         const s = state.sessionAnswers[i];
         state.selectedOptions = s.selectedOptions; state.isAnswerChecked = s.isAnswerChecked; state.lastResult = s.lastResult;
         return;
     }
 
-    // Безопасный доступ
+    // ИСПРАВЛЕНИЕ: Если режим "Работа над ошибками", мы НЕ загружаем историю.
+    // Мы хотим дать возможность ответить заново.
+    if (state.view === 'mistakes') {
+        resetQuestionState();
+        return;
+    }
+
+    // 2. Иначе проверяем глобальную историю (для обычного теста)
     const history = state.userProgress && state.userProgress[q.id];
     if (history && history.selected) {
         state.selectedOptions = history.selected;
@@ -542,6 +551,7 @@ function loadStateForIndex(i) {
         resetQuestionState();
     }
 }
+
 function handleOptionSelect(idx) {
     if(state.isAnswerChecked) return; haptic('light');
     if(state.selectedOptions.includes(idx)) state.selectedOptions=state.selectedOptions.filter(x=>x!==idx); else state.selectedOptions.push(idx);
@@ -555,6 +565,7 @@ function checkAnswer() {
     
     if(!state.userProgress) state.userProgress = {};
     
+    // Если ответили верно, статус меняется на correct (уйдет из ошибок при следующем запуске)
     state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1, selected: [...state.selectedOptions] };
     saveCurrentState(); saveProgressToCloud(); render();
 }
@@ -661,7 +672,10 @@ function renderLearnContent() {
                         if(!opt||!opt.trim())return'';
                         // Убираем дублирование нумерации (1) или 1. в начале строки)
                         const cleanOpt = opt.replace(/^[\d]+[).]\s*/, '');
-                        const isC=q.correctIndices.includes(i); let bg="bg-white dark:bg-black"; if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] dark:bg-yellow-700 dark:text-white";
+                        const isC=q.correctIndices.includes(i); 
+                        // ЦВЕТОВАЯ ЛОГИКА ДЛЯ КОНСПЕКТА (LEARN)
+                        let bg="bg-white dark:bg-black text-black dark:text-slate-300"; 
+                        if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] text-black dark:bg-[#FFD700] dark:text-black"; // ЗОЛОТОЙ ФОН И ЧЕРНЫЙ ТЕКСТ ВСЕГДА
                         return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bg}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bg}">${cleanOpt}</div></div>`;
                     }).join('')}
                 </div>
@@ -683,10 +697,17 @@ function renderQuizContent() {
                 ${q.options.map((opt, i) => {
                     if(!opt||!opt.trim())return'';
                     let cls="w-full p-4 rounded-2xl text-left font-semibold text-sm transition-all border relative btn-click ";
-                    if(!state.isAnswerChecked) { if(state.selectedOptions.includes(i)) cls+="border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.01]"; else cls+="border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900"; }
+                    if(!state.isAnswerChecked) { 
+                        if(state.selectedOptions.includes(i)) cls+="border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.01]"; 
+                        else cls+="border-slate-200 bg-white text-black hover:bg-slate-50 dark:border-slate-800 dark:bg-black dark:text-white dark:hover:bg-slate-900"; 
+                    }
                     else {
                         const sel=state.selectedOptions.includes(i), corr=q.correctIndices.includes(i);
-                        if(sel&&corr) cls+="border-emerald-500 bg-emerald-500 text-white shadow-md"; else if(sel&&!corr) cls+="border-rose-500 bg-rose-500 text-white shadow-md"; else if(!sel&&corr) cls+="border-[3px] border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold"; else cls+="border-transparent bg-slate-100 text-slate-400 opacity-50 dark:bg-slate-800 dark:text-slate-600";
+                        // ЛОГИКА ЦВЕТОВ ПОСЛЕ ПРОВЕРКИ
+                        if(sel&&corr) cls+="border-emerald-500 bg-emerald-500 text-white shadow-md"; 
+                        else if(sel&&!corr) cls+="border-rose-500 bg-rose-500 text-white shadow-md"; 
+                        else if(!sel&&corr) cls+="border-[3px] border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 font-bold"; // Светлый текст для правильного ответа
+                        else cls+="border-transparent bg-slate-100 text-slate-400 opacity-50 dark:bg-slate-800 dark:text-slate-400"; // Светлее (slate-400) вместо slate-600
                     }
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
@@ -737,7 +758,7 @@ function renderCardsContent() {
                              <div class="w-full space-y-2 pb-4 shrink-0">
                                 ${q.options.map(opt=>{
                                     if(!opt||!opt.trim())return'';
-                                    return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left leading-tight">${opt}</div>`
+                                    return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-300 text-left leading-tight">${opt}</div>`
                                 }).join('')}
                                 <div class="h-8 w-full shrink-0"></div>
                              </div>
