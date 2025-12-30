@@ -136,14 +136,15 @@
 </div>
 
 <script>
-// !!! ЗАМЕНИТЕ ЭТУ ССЫЛКУ НА СВОЮ НОВУЮ ССЫЛКУ ИЗ APPS SCRIPT !!!
+// --- КОНФИГУРАЦИЯ ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
 
+// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
 let accessData = null; 
 let videoFinished = false; 
 let accessError = null;
-let currentUserId = null; // ID пользователя для сохранения
-let isSaving = false; // Флаг сохранения
+let currentUserId = null;
+let isSaving = false;
 
 const tg = window.Telegram.WebApp;
 
@@ -177,7 +178,7 @@ async function performAccessCheck() {
     
     currentUserId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
     
-    if(window.location.protocol==='file:'){ accessData={allowed:true, progress: {}};processQuestions();checkStateTransition();return;}
+    if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
 
     if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
     
@@ -190,18 +191,15 @@ async function performAccessCheck() {
         
         if(data.allowed){ 
             accessData=data; 
-            // Если с сервера пришел прогресс, объединяем его с локальным (приоритет сервера)
-            if (data.progress) {
-                // Если в локальном кэше есть данные новее (теоретически), можно мержить, 
-                // но для надежности берем облако как истину.
+            // Слияние прогресса (Приоритет у облака, если там пусто - берем локалку)
+            if (data.progress && Object.keys(data.progress).length > 0) {
                 state.userProgress = data.progress;
             } else {
-                // Если с сервера пришло пусто, пробуем достать из локалки (на случай оффлайна ранее)
                 const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
                 if (localP) state.userProgress = JSON.parse(localP);
             }
-            
-            localStorage.setItem(ck, JSON.stringify(data));
+            // Обновляем локальный кэш
+            localStorage.setItem(ck,JSON.stringify(data)); 
             localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
 
             processQuestions(); 
@@ -210,7 +208,7 @@ async function performAccessCheck() {
             accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
         }
     } catch(e){ 
-        // Ошибка сети -> работаем в оффлайне с кэшем
+        // ОФФЛАЙН РЕЖИМ
         const c = localStorage.getItem(ck);
         const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
         
@@ -219,7 +217,7 @@ async function performAccessCheck() {
                 const p=JSON.parse(c); 
                 if(p.allowed){ 
                     accessData=p; 
-                    if (localP) state.userProgress = JSON.parse(localP);
+                    if(localP) state.userProgress = JSON.parse(localP);
                     processQuestions(); 
                 } 
             } catch(err){ localStorage.removeItem(ck); } 
@@ -229,33 +227,22 @@ async function performAccessCheck() {
     checkStateTransition();
 }
 
-// --- СОХРАНЕНИЕ ПРОГРЕССА В ОБЛАКО ---
 async function saveProgressToCloud() {
     if (!currentUserId || !accessData || isSaving) return;
     isSaving = true;
-
-    // Сначала сохраняем локально (мгновенно)
     localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
-
-    // Теперь пробуем отправить в облако
+    
+    // Используем navigator.sendBeacon для надежности при закрытии, или fetch
     try {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors', // Важно для Google Apps Script
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userId: currentUserId,
-                progress: state.userProgress
-            })
+            mode: 'no-cors',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ userId: currentUserId, progress: state.userProgress })
         });
-        console.log('Progress saved to cloud');
-    } catch (e) {
-        console.warn('Failed to save progress to cloud (offline?)');
-    } finally {
-        isSaving = false;
-    }
+    } catch(e) {}
+    isSaving = false;
 }
-
 
 function checkStateTransition() {
     if(!videoFinished && !accessError) return; 
@@ -338,7 +325,6 @@ function processQuestions() {
             id: q.id, 
             topic: t?t.title:"Общее", 
             question: escapeHtml(q.question), 
-            // ВЕРНУЛ КАК БЫЛО: НЕ УДАЛЯЕМ ЦИФРЫ ВООБЩЕ
             options: (q.options||[]).map(o=>escapeHtml(o)), 
             correctIndices: correct, 
             image: q.image 
@@ -368,48 +354,32 @@ function updateTopicListUI() {
     list.querySelectorAll('button[data-topic]').forEach(btn => {
         const t=btn.getAttribute('data-topic'), sel=state.selectedTopics.includes(t), icon=btn.querySelector('.icon-area');
         
-        // --- ПРОГРЕСС-БАР ДЛЯ ТЕМЫ ---
-        const totalInTopic = QUESTIONS_DATA.filter(q => q.topic === t).length;
-        const correctInTopic = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
-        const progressPct = totalInTopic > 0 ? Math.round((correctInTopic / totalInTopic) * 100) : 0;
+        // --- ПРОГРЕСС-БАР ---
+        const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
+        const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
+        const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
         
         let progressHtml = `
-            <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
-                <div class="h-full bg-emerald-500 rounded-full" style="width: ${progressPct}%"></div>
-            </div>
-            <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
-                <span>Прогресс</span>
-                <span>${progressPct}%</span>
-            </div>
+            <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: ${pct}%"></div></div>
+            <div class="text-[10px] text-slate-400 mt-1 flex justify-between"><span>Прогресс</span><span>${pct}%</span></div>
         `;
         
         if(sel) { 
             btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-black text-white dark:bg-white dark:text-black border border-transparent"; 
             if(icon) icon.innerHTML='<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3"></i>';
-            // В активном состоянии прогресс бар можно сделать чуть прозрачнее или другого цвета
-             progressHtml = `
-                <div class="w-full h-1.5 bg-white/20 dark:bg-black/20 rounded-full mt-1 overflow-hidden">
-                    <div class="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full" style="width: ${progressPct}%"></div>
-                </div>
-                <div class="text-[10px] text-white/60 dark:text-black/60 mt-0.5 flex justify-between">
-                    <span>Прогресс</span>
-                    <span>${progressPct}%</span>
-                </div>
-            `;
+            progressHtml = `<div class="w-full h-1.5 bg-white/20 dark:bg-black/20 rounded-full mt-1 overflow-hidden"><div class="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full" style="width: ${pct}%"></div></div><div class="text-[10px] text-white/60 dark:text-black/60 mt-0.5 flex justify-between"><span>Прогресс</span><span>${pct}%</span></div>`;
         }
         else { 
             btn.className="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"; 
             if(icon) icon.innerHTML=''; 
         }
         
-        // Вставляем прогресс бар внутрь кнопки
         const contentDiv = btn.querySelector('.topic-content');
         if(contentDiv) contentDiv.innerHTML = `<span class="block text-wrap leading-tight pr-6 mb-1">${t}</span> ${progressHtml}`;
     });
     const apply=document.getElementById('apply-btn'); if(apply) apply.innerText=`Применить (${state.selectedTopics.length})`;
     lucide.createIcons();
 }
-
 function updateSelectAllButtonUI() {
     const btn=document.getElementById('select-all-btn'); if(!btn)return;
     const all=state.selectedTopics.length===availableTopics.length;
@@ -422,15 +392,35 @@ function getFilteredQuestions(mode) {
     if (mode==='mistakes') q = q.filter(x => state.userProgress[x.id]?.status==='wrong');
     return q;
 }
+
+// !!! ЛОГИКА ПРОДОЛЖЕНИЯ ТЕСТА !!!
 function startMode(mode, resume=false) {
     haptic('medium');
     if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
+    
     let q = getFilteredQuestions(mode);
     if(!q.length){ alert("Нет вопросов!"); return; }
+    
     if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
-    state.playableQuestions=q; state.currentQuestionIndex=0; state.quizFinished=false;
-    state.view=mode; state.sessionAnswers={}; state.resumeState=null; resetQuestionState(); render();
+    state.playableQuestions = q;
+
+    // ЕСЛИ ЭТО ТЕСТ/КАРТОЧКИ - ИЩЕМ ПЕРВЫЙ НЕРЕШЕННЫЙ ВОПРОС
+    if (mode === 'quiz' || mode === 'cards') {
+        let firstUnsolved = q.findIndex(question => state.userProgress[question.id]?.status !== 'correct');
+        if (firstUnsolved === -1) firstUnsolved = 0; // Если все решены, начинаем с начала
+        state.currentQuestionIndex = firstUnsolved;
+    } else {
+        state.currentQuestionIndex = 0;
+    }
+    
+    state.quizFinished = false;
+    state.view = mode; 
+    state.sessionAnswers = {}; 
+    state.resumeState = null; 
+    resetQuestionState(); 
+    render();
 }
+
 function resetQuestionState() { state.selectedOptions=[]; state.isAnswerChecked=false; state.lastResult=false; state.isFlipped=false; state.swipeX=0; state.animState='idle'; }
 function saveCurrentState() { state.sessionAnswers[state.currentQuestionIndex] = { selectedOptions: [...state.selectedOptions], isAnswerChecked: state.isAnswerChecked, lastResult: state.lastResult }; }
 function loadStateForIndex(i) {
@@ -450,8 +440,7 @@ function checkAnswer() {
     state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1 };
     saveCurrentState();
     
-    // !!! СОХРАНЕНИЕ В ОБЛАКО ПОСЛЕ ОТВЕТА !!!
-    saveProgressToCloud();
+    saveProgressToCloud(); // Сохраняем сразу
     
     render();
 }
@@ -468,7 +457,7 @@ function prevQuestion() {
 }
 function goHome() {
     haptic('medium');
-    saveProgressToCloud(); // Сохраняем при выходе
+    saveProgressToCloud();
     if(['quiz','cards','mistakes'].includes(state.view) && !state.quizFinished && state.playableQuestions.length) state.resumeState={mode:state.view, index:state.currentQuestionIndex, questions:state.playableQuestions};
     else state.resumeState=null;
     state.view='menu'; render();
@@ -584,7 +573,6 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
-            <!-- РАСПОРКА ДЛЯ СКРОЛЛА: ТЕПЕРЬ ОТВЕТЫ ВСЕГДА ВЫЛЕЗАЮТ ИЗ ПОД КНОПКИ -->
             <div class="h-[100px] w-full shrink-0"></div>
         </div>
     </div>`;
@@ -615,7 +603,6 @@ function renderCardsContent() {
     const q=state.playableQuestions[state.currentQuestionIndex];
     const correctText=q.correctIndices.map(i=>q.options[i]).join('<br><br>');
     const imageBlock=q.image?`<div class="mb-3 w-full max-h-32 h-auto rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-800 shrink-0"><img src="${q.image}" class="w-full h-full object-contain"></div>`:'';
-    
     return `<div class="flex flex-col h-full p-4 overflow-hidden select-none animate-fade-in relative">
         <div class="flex justify-center mb-2 text-xs font-black text-slate-300 dark:text-slate-700 flex-shrink-0">${state.currentQuestionIndex+1} / ${state.playableQuestions.length}</div>
         <div class="flex-1 relative perspective-1000 max-w-sm mx-auto w-full mb-4">
@@ -632,7 +619,6 @@ function renderCardsContent() {
                                     if(!opt||!opt.trim())return'';
                                     return `<div class="w-full p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-black/20 text-xs font-medium text-slate-600 dark:text-slate-400 text-left leading-tight">${opt}</div>`
                                 }).join('')}
-                                <!-- РАСПОРКА ДЛЯ КАРТОЧКИ (FRONT) -->
                                 <div class="h-8 w-full shrink-0"></div>
                              </div>
                          </div>
@@ -643,7 +629,6 @@ function renderCardsContent() {
                         <h3 class="text-[10px] font-bold opacity-50 uppercase tracking-widest mb-4 text-white dark:text-white shrink-0">Правильный ответ</h3>
                         <div class="flex-1 flex flex-col items-center justify-center w-full card-scroll min-h-0">
                             <div class="text-lg sm:text-xl font-bold mb-6 text-[#FFD700] dark:text-[#FFD700] select-none leading-snug">${correctText}</div>
-                            <!-- РАСПОРКА ДЛЯ КАРТОЧКИ (BACK) -->
                             <div class="h-8 w-full shrink-0"></div>
                         </div>
                     </div>
@@ -666,51 +651,26 @@ function renderFilterModal() {
     if(!state.showFilterModal) return '';
     const allSel=state.selectedTopics.length===availableTopics.length;
     const counts={}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
-    
-    // !!! НОВЫЙ РЕНДЕР МОДАЛКИ С ПРОГРЕСС-БАРАМИ !!!
-    // Логика формирования списка тем
+    // РЕНДЕР МОДАЛКИ С ПРОГРЕСС-БАРАМИ
     const topicListHTML = availableTopics.map(t => {
         const sel = state.selectedTopics.includes(t);
         const count = counts[t] || 0;
-        
-        // Расчет прогресса
         const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
         const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress[q.id]?.status === 'correct').length;
         const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
         
-        // Стили
         let btnClass, iconHtml, progressHtml;
-        
         if (sel) {
             btnClass = "bg-black text-white dark:bg-white dark:text-black";
             iconHtml = '<i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0 absolute top-3 right-3"></i>';
-            progressHtml = `
-                <div class="w-full h-1.5 bg-white/20 dark:bg-black/20 rounded-full mt-1 overflow-hidden">
-                    <div class="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full" style="width: ${progress}%"></div>
-                </div>
-                <div class="text-[10px] text-white/60 dark:text-black/60 mt-0.5 flex justify-between">
-                    <span>Прогресс</span><span>${progress}%</span>
-                </div>`;
+            progressHtml = `<div class="w-full h-1.5 bg-white/20 dark:bg-black/20 rounded-full mt-1 overflow-hidden"><div class="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full" style="width: ${progress}%"></div></div><div class="text-[10px] text-white/60 dark:text-black/60 mt-0.5 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>`;
         } else {
             btnClass = "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300";
             iconHtml = '';
-            progressHtml = `
-                <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
-                    <div class="h-full bg-emerald-500 rounded-full" style="width: ${progress}%"></div>
-                </div>
-                <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
-                    <span>Прогресс</span><span>${progress}%</span>
-                </div>`;
+            progressHtml = `<div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: ${progress}%"></div></div><div class="text-[10px] text-slate-400 mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>`;
         }
 
-        return `
-        <button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${btnClass} relative">
-            <div class="topic-content w-full">
-                <span class="block text-wrap leading-tight pr-6 mb-1">${t}</span>
-                ${progressHtml}
-            </div>
-            <div class="icon-area">${iconHtml}</div>
-        </button>`;
+        return `<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${btnClass} relative"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span>${progressHtml}</div><div class="icon-area">${iconHtml}</div></button>`;
     }).join('');
 
     return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
