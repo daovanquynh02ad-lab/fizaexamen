@@ -2,7 +2,6 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <!-- interactive-widget=resizes-content нужен для правильной работы клавиатуры в Конспекте -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -91,12 +90,9 @@
             width: 100%; 
             position: relative; 
             padding: 0;
-            /* ВОЗВРАЩАЕМ БАЗОВЫЙ ОТСТУП для Тестов и Карточек */
             padding-bottom: 100px; 
         }
-
-        /* --- ЛОКАЛЬНОЕ ИСПРАВЛЕНИЕ ДЛЯ РЕЖИМА "LEARN" (КОНСПЕКТ) --- */
-        /* Убираем отступ только когда активен режим learn */
+        /* Убираем отступ только в режиме конспекта */
         #app[data-view="learn"] .layout-content {
             padding-bottom: 0 !important;
         }
@@ -510,7 +506,13 @@ function executeFinalReset() {
         if (!q || topicsToRemove.has(q.topic)) continue; 
         newProgress[id] = prog;
     }
-    state.userProgress = newProgress; state.resetSelectedTopics = []; state.showConfirmResetDialog = false; 
+    state.userProgress = newProgress; 
+    state.resetSelectedTopics = []; 
+    state.showConfirmResetDialog = false; 
+    
+    // ИСПРАВЛЕНИЕ: Сбрасываем сохраненную сессию при сбросе прогресса
+    state.resumeState = null; 
+    
     saveProgressToCloud(); render();
 }
 function cancelReset() { state.showConfirmResetDialog = false; state.showResetModal = true; render(); setTimeout(() => { updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); }, 0); }
@@ -569,26 +571,20 @@ function startMode(mode, resume=false) {
     if(resume && (!state.playableQuestions || state.playableQuestions.length === 0)) resume = false;
     if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
     
-    // ИСПРАВЛЕНИЕ ЛОГИКИ ОШИБОК:
-    // Если режим 'mistakes', мы берем ВСЕ ошибки, игнорируя фильтр тем.
-    // Если режим 'quiz' или 'cards', мы учитываем фильтр тем.
+    // ИСПРАВЛЕНИЕ: Для режима 'mistakes' игнорируем фильтр тем и берем все ошибки
     let q;
-    
     if (mode === 'mistakes') {
-        // Берем все вопросы, у которых статус wrong в прогрессе
         q = QUESTIONS_DATA.filter(x => state.userProgress && state.userProgress[x.id]?.status === 'wrong');
     } else {
-        // Обычная логика: фильтр по темам
         q = QUESTIONS_DATA.filter(x => state.selectedTopics.includes(x.topic));
     }
 
-    // Если это квиз или карточки, убираем уже решенные (correct)
     if (mode === 'quiz' || mode === 'cards') {
         const unsolved = q.filter(question => { const p = state.userProgress[question.id]; return !p || p.status !== 'correct'; });
         if (unsolved.length > 0) q = unsolved;
     }
     
-    if(!q.length){ alert(mode === 'mistakes' ? "Нет ошибок!" : "Нет вопросов!"); return; }
+    if(!q.length){ alert(mode==='mistakes'?"Нет ошибок!":"Нет вопросов!"); return; }
     
     // Сброс для конспектов
     if (mode === 'learn') {
@@ -853,6 +849,12 @@ function renderHeader() {
 function renderMenuContent() {
     const learned=Object.values(state.userProgress||{}).filter(p=>p.status==='correct').length;
     const errors=Object.values(state.userProgress||{}).filter(p=>p.status==='wrong').length;
+    
+    // ИСПРАВЛЕНИЕ: Если режим 'mistakes' и ошибок 0, сбрасываем состояние
+    if(state.resumeState && state.resumeState.mode === 'mistakes' && errors === 0) {
+        state.resumeState = null;
+    }
+    
     const allSel=state.selectedTopics.length===availableTopics.length;
     return `<div class="p-4 space-y-4 animate-fade-in pb-10">
         <div class="bg-black dark:bg-slate-900 rounded-[2rem] p-6 text-white shadow-soft dark:shadow-none relative overflow-hidden">
