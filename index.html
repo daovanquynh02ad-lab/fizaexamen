@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <!-- 1. ЗАПРЕТ КЭШИРОВАНИЯ HTML СТРАНИЦЫ -->
+    <!-- 1. ЗАПРЕТ КЭШИРОВАНИЯ (БАЗОВЫЙ) -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -19,8 +19,18 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Noto+Serif:wght@700&display=swap" rel="stylesheet">
 
-    <!-- 2. АВТОМАТИЧЕСКИЙ СБРОС КЭША СКРИПТОВ -->
+    <!-- 2. ANTI-CACHE: АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ -->
     <script>
+        // Этот блок заставляет Telegram перезагрузить страницу с сервера при открытии,
+        // игнорируя жесткий кэш Webview. Работает автоматически.
+        try {
+            if (!sessionStorage.getItem('imed_force_reload')) {
+                sessionStorage.setItem('imed_force_reload', 'true');
+                window.location.reload(true); // Принудительная перезагрузка с сервера
+            }
+        } catch(e) {}
+
+        // Загрузка вопросов с уникальной меткой времени (всегда свежая версия)
         document.write('<script src="questions.js?v=' + Date.now() + '"><\/script>');
     </script>
 
@@ -164,12 +174,11 @@ const tg = window.Telegram.WebApp;
 
 try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
 
-// !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ ВИБРАЦИИ !!!
+// ФУНКЦИЯ ВИБРАЦИИ
 function haptic(type='light') {
     try {
         if(tg.HapticFeedback) {
             // Telegram разделяет методы impact и notification. 
-            // Warning - это уведомление, а не удар.
             if(type === 'error' || type === 'success' || type === 'warning') {
                 tg.HapticFeedback.notificationOccurred(type);
             } else {
@@ -178,10 +187,7 @@ function haptic(type='light') {
         } else if(navigator.vibrate) {
             navigator.vibrate(10);
         }
-    } catch(e) {
-        // Игнорируем ошибки вибрации, чтобы не ломать приложение
-        console.error("Haptic error:", e);
-    }
+    } catch(e) { console.error("Haptic error:", e); }
 }
 
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
@@ -413,15 +419,22 @@ function toggleSelectAllReset() {
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
 
+// !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОДТВЕРЖДЕНИЯ СБРОСА !!!
 function confirmReset() {
-    // Если темы не выбраны, ничего не делаем или показываем ошибку
+    // 1. Проверяем, выбраны ли темы
     if(!state.resetSelectedTopics.length) {
         haptic('error');
         return;
     }
-    // ВАЖНО: haptic('warning') теперь корректно обрабатывается новой функцией haptic
+    
     haptic('warning');
+    
+    // 2. ВАЖНО: Закрываем окно выбора тем, чтобы не было наслоения
+    state.showResetModal = false;
+    
+    // 3. Открываем окно подтверждения ("Вы уверены?")
     state.showConfirmResetDialog = true;
+    
     render(); 
 }
 
