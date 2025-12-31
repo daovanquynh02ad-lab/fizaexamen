@@ -553,6 +553,12 @@ function updateTopicListUI(mode) {
         const contentDiv = btn.querySelector('.topic-content');
         if(contentDiv) contentDiv.innerHTML = `<span class="block text-wrap leading-tight pr-6 mb-1">${t}</span> ${progressHtml}`;
     });
+    
+    // FIX: Updating Select All Button Text
+    if (mode === 'filter') {
+        updateSelectAllButtonUI('filter');
+    }
+    
     const apply = document.getElementById(mode === 'filter' ? 'apply-btn' : 'confirm-reset-btn'); 
     if(apply) apply.innerText = mode === 'filter' ? `Применить (${selectedArr.length})` : `Сбросить (${selectedArr.length})`;
     lucide.createIcons();
@@ -817,6 +823,9 @@ function render() {
     
     if(state.view==='cards') setTimeout(initCardEvents,0);
     
+    // Add Swipe Events for Filter
+    if(state.showFilterModal) setTimeout(initFilterSwipeEvents, 0);
+    
     if (state.view === 'learn') {
         renderLearnList();
         updateSearchUI(); 
@@ -885,9 +894,8 @@ function renderMenuContent() {
 function renderLearnContent() {
     const isSearchVisible = state.searchQuery && state.searchQuery.trim().length > 0;
     
-    // ВЕРНУЛ h-full и flex-col, но убрал все лишние отступы
-    return `<div class="p-4 space-y-4 h-full flex flex-col animate-fade-in">
-        <div class="flex gap-2 mb-2 items-center shrink-0 z-20 bg-slate-50 dark:bg-black py-1">
+    return `<div class="px-4 pt-2 h-full flex flex-col animate-fade-in gap-2">
+        <div class="flex gap-2 items-center shrink-0 z-20 bg-slate-50 dark:bg-black pb-1">
             <div class="relative flex-1">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i data-lucide="search" class="w-4 h-4 text-slate-400"></i></div>
                 <input id="learn-search-input" type="text" 
@@ -896,15 +904,15 @@ function renderLearnContent() {
                     onkeyup="if(event.key==='Enter') this.blur()"
                     enterkeyhint="search"
                     placeholder="Поиск..." 
-                    class="search-input w-full pl-9 pr-[85px] py-3 bg-slate-100 dark:bg-slate-900 border border-transparent focus:border-blue-500 dark:focus:border-blue-500 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none transition-all placeholder:font-medium shadow-sm focus:shadow-md">
+                    class="search-input w-full pl-9 pr-[85px] py-2 bg-slate-100 dark:bg-slate-900 border border-transparent focus:border-blue-500 dark:focus:border-blue-500 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none transition-all placeholder:font-medium shadow-sm focus:shadow-md">
                 
                 <div id="search-controls" class="absolute inset-y-0 right-0 flex items-center pr-1 gap-0.5 search-controls ${isSearchVisible ? 'visible' : ''}">
-                     <button onclick="navigateSearch('prev')" class="p-1.5 rounded-lg text-slate-400 hover:text-black hover:bg-slate-200 dark:hover:text-white dark:hover:bg-slate-700 transition-colors"><i data-lucide="chevron-up" class="w-5 h-5"></i></button>
-                     <button onclick="navigateSearch('next')" class="p-1.5 rounded-lg text-slate-400 hover:text-black hover:bg-slate-200 dark:hover:text-white dark:hover:bg-slate-700 transition-colors"><i data-lucide="chevron-down" class="w-5 h-5"></i></button>
-                     <button onclick="clearSearch()" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+                     <button onclick="navigateSearch('prev')" class="p-1 rounded-lg text-slate-400 hover:text-black hover:bg-slate-200 dark:hover:text-white dark:hover:bg-slate-700 transition-colors"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
+                     <button onclick="navigateSearch('next')" class="p-1 rounded-lg text-slate-400 hover:text-black hover:bg-slate-200 dark:hover:text-white dark:hover:bg-slate-700 transition-colors"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+                     <button onclick="clearSearch()" class="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors"><i data-lucide="x" class="w-4 h-4"></i></button>
                 </div>
             </div>
-            <button onclick="toggleAnswersVisibility()" class="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-xl border btn-click transition-all shadow-sm active:scale-95 ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}">
+            <button onclick="toggleAnswersVisibility()" class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl border btn-click transition-all shadow-sm active:scale-95 ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}">
                 <i data-lucide="${state.hideAnswersInLearn?'eye':'eye-off'}" class="w-5 h-5"></i>
             </button>
         </div>
@@ -1018,6 +1026,53 @@ function renderCardsFooter() {
     </div>`;
 }
 
+function initFilterSwipeEvents() {
+    const modalContent = document.getElementById('filter-modal-content');
+    const topicsList = document.getElementById('topics-list');
+    if(!modalContent || !topicsList) return;
+
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+    let isScrollAtTop = true;
+
+    modalContent.addEventListener('touchstart', (e) => {
+        if(topicsList.scrollTop > 0) {
+            isScrollAtTop = false;
+            return;
+        }
+        isScrollAtTop = true;
+        startY = e.touches[0].clientY;
+        isDragging = true;
+        modalContent.style.transition = 'none';
+    }, {passive: true});
+
+    modalContent.addEventListener('touchmove', (e) => {
+        if(!isDragging) return;
+        currentY = e.touches[0].clientY;
+        const diff = currentY - startY;
+
+        if(diff > 0 && isScrollAtTop) {
+            if(e.cancelable) e.preventDefault();
+            modalContent.style.transform = `translateY(${diff}px)`;
+        }
+    }, {passive: false});
+
+    modalContent.addEventListener('touchend', (e) => {
+        if(!isDragging) return;
+        isDragging = false;
+        const diff = currentY - startY;
+
+        modalContent.style.transition = 'transform 0.3s ease-out';
+        if(diff > 120 && isScrollAtTop) {
+            modalContent.style.transform = `translateY(100%)`;
+            setTimeout(() => toggleFilterModal(false), 200);
+        } else {
+            modalContent.style.transform = '';
+        }
+    });
+}
+
 function renderFilterModal() {
     if(!state.showFilterModal) return '';
     const allSel=state.selectedTopics.length===availableTopics.length;
@@ -1033,16 +1088,32 @@ function renderFilterModal() {
     // FIX: Устанавливаем начальное состояние переключателя
     const shuffleBg = state.isShuffleEnabled ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600';
     const shuffleKnob = state.isShuffleEnabled ? 'left-7' : 'left-1';
+    
+    // Новая логика классов для компактной кнопки
+    const btnBase = "flex-1 flex items-center justify-between px-3 py-2 rounded-xl btn-click border transition-colors";
+    const shuffleBtnClass = state.isShuffleEnabled 
+        ? `${btnBase} bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800`
+        : `${btnBase} bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700`;
 
     return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
-        <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
-            <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
-            <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click">
-                <div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div>
-                <div id="shuffle-toggle-bg" class="w-12 h-6 rounded-full relative transition-colors ${shuffleBg}"><div id="shuffle-toggle-knob" class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${shuffleKnob}"></div></div>
+        <div id="filter-modal-content" class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
+            <div class="flex justify-between items-center mb-2 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            
+            <div class="flex gap-2 mb-2 shrink-0">
+                <!-- Compact Shuffle Button -->
+                <div onclick="toggleShuffle()" class="${shuffleBtnClass}">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="shuffle" class="w-4 h-4 ${state.isShuffleEnabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}"></i>
+                        <span class="text-xs font-bold ${state.isShuffleEnabled ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300'}">Случайный</span>
+                    </div>
+                    <div id="shuffle-toggle-bg" class="w-12 h-6 rounded-full relative transition-colors ${shuffleBg} scale-75 origin-right"><div id="shuffle-toggle-knob" class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${shuffleKnob}"></div></div>
+                </div>
+
+                <!-- Select All Button moved here -->
+                <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="flex-1 flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors btn-click"><span>${allSel?'Снять все':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
             </div>
+
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
-                <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
                 ${availableTopics.map(t=>{
                     const sel = state.selectedTopics.includes(t);
                     const { total, correct } = stats[t] || { total: 0, correct: 0 };
