@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <!-- ДОБАВЛЕНО: interactive-widget=resizes-content для правильной работы клавиатуры на iOS -->
+    <!-- interactive-widget=resizes-content позволяет клавиатуре сжимать область просмотра, а не перекрывать её -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -41,16 +41,22 @@
         /* --- БАЗА --- */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
-        /* ИСПРАВЛЕНИЕ ВЫСОТЫ: position: fixed и inset: 0 для жесткой фиксации на iOS */
-        html, body {
+        /* ИСПРАВЛЕНИЕ ПУСТОТ: Используем dvh (Dynamic Viewport Height) */
+        html {
+            height: 100dvh;
+            background-color: #f8fafc; /* slate-50 чтобы фон совпадал */
+        }
+        body {
             position: fixed; 
-            inset: 0;
+            top: 0; left: 0;
             width: 100%; 
-            height: 100%;
+            height: 100dvh; /* Важно: динамическая высота */
             overflow: hidden; 
             overscroll-behavior: none;
-            background-color: #000; color: #000; font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+            color: #000; font-family: 'Inter', sans-serif;
         }
+        .dark html, .dark body { background-color: #000; }
 
         #mobile-wrapper {
             width: 100%; max-width: 480px; height: 100%;
@@ -60,7 +66,7 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ХЕДЕР (НЕ ТРОГАЕМ) --- */
+        /* --- ХЕДЕР (БЕЗ ИЗМЕНЕНИЙ) --- */
         .layout-header {
             flex-shrink: 0;
             width: 100%;
@@ -77,12 +83,19 @@
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КОНТЕНТ --- */
+        /* --- КОНТЕНТ (ИСПРАВЛЕН ОТСТУП) --- */
         .layout-content {
-            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
-            width: 100%; position: relative; padding: 0;
-            padding-bottom: 100px; 
+            flex: 1; 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch;
+            width: 100%; 
+            position: relative; 
+            padding: 0;
+            /* Исправлено: уменьшен padding-bottom с 100px до 24px, чтобы убрать белую дыру снизу */
+            padding-bottom: 24px; 
         }
+        /* В режимах викторины/карточек нам нужен отступ под футер, добавляем его динамически через JS или спец класс, если нужно, но пока 100px там не обязательно */
+        
         .layout-content::-webkit-scrollbar { display: none; }
 
         /* --- ФУТЕР --- */
@@ -131,7 +144,6 @@
             display: flex; align-items: center; gap: 2px;
             opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
         }
-        /* Только когда класс добавлен явно */
         .search-controls.visible { opacity: 1; pointer-events: auto; }
         
         .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
@@ -194,17 +206,6 @@
 </div>
 
 <script>
-// --- ИСПРАВЛЕНИЕ ДЛЯ IOS KEYBOARD ---
-// Это решает проблему белой пустоты снизу при открытии клавиатуры
-if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-        // Принудительно ставим высоту body равной видимой области
-        document.body.style.height = window.visualViewport.height + 'px';
-        // Скроллим к верху, чтобы избежать артефактов
-        window.scrollTo(0, 0);
-    });
-}
-
 // --- КОНФИГУРАЦИЯ ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
 
@@ -639,14 +640,12 @@ function escapeRegExp(string) {
 function updateSearchUI() {
     const controls = document.getElementById('search-controls');
     if (!controls) return;
-    // FIX: Строгая проверка - показываем кнопки только если есть реальный текст
     if (state.searchQuery && state.searchQuery.trim().length > 0) controls.classList.add('visible');
     else controls.classList.remove('visible');
 }
 
 function handleSearchInput(val) {
     state.searchQuery = val;
-    // FIX: Обновляем UI сразу, чтобы кнопки исчезали при очистке
     updateSearchUI();
     
     clearTimeout(searchDebounceTimer);
