@@ -19,14 +19,24 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Noto+Serif:wght@700&display=swap" rel="stylesheet">
 
-    <!-- 2. ДИНАМИЧЕСКАЯ ЗАГРУЗКА БАЗЫ ВОПРОСОВ (БЕЗ document.write) -->
+    <!-- 2. НАДЕЖНАЯ ЗАГРУЗКА БАЗЫ -->
     <script>
-        // Загружаем questions.js с уникальным timestamp, чтобы избежать кэша.
-        // Делаем это сразу, чтобы к моменту нажатия "Начать" данные были (или грузились).
+        // Глобальный флаг загрузки
+        window.isQuestionsLoaded = false;
+
         (function() {
             var script = document.createElement('script');
+            // Добавляем timestamp для пробива кэша JS файла
             script.src = 'questions.js?v=' + Date.now();
-            script.async = false; // Сохраняем порядок, хотя тут один файл
+            script.async = true;
+            script.onload = function() {
+                window.isQuestionsLoaded = true;
+                if (window.onQuestionsReady) window.onQuestionsReady();
+            };
+            script.onerror = function() {
+                window.questionsLoadError = true;
+                if (window.onQuestionsError) window.onQuestionsError();
+            };
             document.head.appendChild(script);
         })();
     </script>
@@ -126,9 +136,29 @@
         .hidden-force { display: none !important; }
         #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
 
-        /* СТИЛИ ПОИСКА */
-        .search-input::placeholder { color: #94a3b8; }
-        .dark .search-input::placeholder { color: #475569; }
+        /* СТИЛИ ПОИСКА И CSS-TOGGLE */
+        .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+        
+        /* CSS TOGGLE LOGIC */
+        /* .correct-answer - класс для правильного ответа */
+        .learn-container .correct-answer { background-color: #FFD700 !important; color: #000 !important; }
+        .dark .learn-container .correct-answer { background-color: #FFD700 !important; color: #000 !important; }
+
+        /* Если контейнер имеет класс .hide-answers - убираем подсветку */
+        .learn-container.hide-answers .correct-answer { 
+            background-color: #fff !important; color: #000 !important; 
+        }
+        .dark .learn-container.hide-answers .correct-answer { 
+            background-color: #000 !important; color: #cbd5e1 !important; /* slate-300 */
+        }
+        
+        /* ПОДСВЕТКА СОВПАДЕНИЙ */
+        mark { background-color: rgba(250, 204, 21, 0.5); color: inherit; border-radius: 2px; padding: 0 1px; }
+        .dark mark { background-color: rgba(250, 204, 21, 0.3); color: white; }
+        
+        /* Активная карточка при навигации по поиску */
+        .active-search-result { box-shadow: 0 0 0 2px #FFD700; }
+        .dark .active-search-result { box-shadow: 0 0 0 2px #FFD700; }
     </style>
     
     <script>
@@ -171,23 +201,22 @@ let accessError = null;
 let currentUserId = null;
 let isSaving = false;
 
+// Таймер для дебаунса поиска
+let searchDebounceTimer = null;
+// IntersectionObserver для Infinite Scroll
+let learnObserver = null;
+
 const tg = window.Telegram.WebApp;
 
 try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; tg.setHeaderColor('#ffffff'); } catch(e){}
 
-// ФУНКЦИЯ ВИБРАЦИИ
 function haptic(type='light') {
     try {
         if(tg.HapticFeedback) {
-            if(type === 'error' || type === 'success' || type === 'warning') {
-                tg.HapticFeedback.notificationOccurred(type);
-            } else {
-                tg.HapticFeedback.impactOccurred(type);
-            }
-        } else if(navigator.vibrate) {
-            navigator.vibrate(10);
-        }
-    } catch(e) { console.error("Haptic error:", e); }
+            if(type === 'error' || type === 'success' || type === 'warning') tg.HapticFeedback.notificationOccurred(type);
+            else tg.HapticFeedback.impactOccurred(type);
+        } else if(navigator.vibrate) navigator.vibrate(10);
+    } catch(e) {}
 }
 
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
@@ -205,20 +234,21 @@ async function userClickedStart() {
 
 function finishVideo() { videoFinished = true; checkStateTransition(); }
 
+// Коллбек загрузки вопросов
+window.onQuestionsReady = () => { if(accessData || videoFinished) performAccessCheck(); };
+window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); };
+
 async function performAccessCheck() {
-    // Проверка наличия переменной из questions.js. Если скрипт еще грузится, подождем немного (простая логика)
-    if(typeof physiology_questions==='undefined'){ 
-        // Попытка подождать 500мс, вдруг скрипт догружается
-        await new Promise(r => setTimeout(r, 500));
-        if(typeof physiology_questions==='undefined') {
-            accessError={type:'file',msg:'Файл questions.js не найден или поврежден.'};
-            checkStateTransition();
-            return;
-        }
+    if(!window.isQuestionsLoaded) {
+        if(window.questionsLoadError) { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); return; }
+        return; 
     }
     
-    currentUserId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
+    currentUserId = tg.initDataUnsafe?.user?.id; // Убрали ID из URL для безопасности
     
+    // Для тестов в браузере (локально) - раскомментировать при разработке
+    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user';
+
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
 
     if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
@@ -232,18 +262,12 @@ async function performAccessCheck() {
         
         if(data.allowed){ 
             accessData=data; 
-            if (data.progress && Object.keys(data.progress).length > 0) {
-                state.userProgress = data.progress;
-            } else {
-                const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
-                if (localP) state.userProgress = JSON.parse(localP);
-            }
-            if (data.selectedTopics && Array.isArray(data.selectedTopics) && data.selectedTopics.length > 0) {
-                state.selectedTopics = data.selectedTopics;
-            } else {
-                 const localT = localStorage.getItem(`imed_topics_${currentUserId}`);
-                 if (localT) state.selectedTopics = JSON.parse(localT);
-            }
+            if (data.progress) state.userProgress = data.progress;
+            else { const localP=localStorage.getItem(`imed_progress_${currentUserId}`); if(localP) state.userProgress=JSON.parse(localP); }
+            
+            if (data.selectedTopics) state.selectedTopics = data.selectedTopics;
+            else { const localT=localStorage.getItem(`imed_topics_${currentUserId}`); if(localT) state.selectedTopics=JSON.parse(localT); }
+            
             localStorage.setItem(ck,JSON.stringify(data)); 
             localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
             localStorage.setItem(`imed_topics_${currentUserId}`, JSON.stringify(state.selectedTopics));
@@ -256,7 +280,6 @@ async function performAccessCheck() {
         const c = localStorage.getItem(ck);
         const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
         const localT = localStorage.getItem(`imed_topics_${currentUserId}`);
-        
         if(c){ 
             try{ 
                 const p=JSON.parse(c); 
@@ -282,6 +305,10 @@ async function saveProgressToCloud() {
     isSaving = true;
     localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
     localStorage.setItem(`imed_topics_${currentUserId}`, JSON.stringify(state.selectedTopics));
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     try {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
@@ -291,10 +318,14 @@ async function saveProgressToCloud() {
                 userId: currentUserId,
                 progress: state.userProgress,
                 selectedTopics: state.selectedTopics
-            })
+            }),
+            signal: controller.signal
         });
-    } catch(e) {}
-    isSaving = false;
+    } catch(e) { } 
+    finally {
+        clearTimeout(timeoutId);
+        isSaving = false;
+    }
 }
 
 function checkStateTransition() {
@@ -364,6 +395,8 @@ const TOPIC_MAP = [
 ];
 
 function escapeHtml(t) { if(!t)return""; return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// Pre-calc search string for optimization
 function processQuestions() {
     if (typeof physiology_questions === 'undefined') return;
     const totalPages = TOPIC_MAP.reduce((s, t) => s + t.pages, 0);
@@ -371,16 +404,23 @@ function processQuestions() {
     let acc = 0;
     const RANGES = TOPIC_MAP.map(t => { const s=acc; acc+=Math.round(t.pages*qPerPage); return {title:t.title,start:s,end:acc}; });
     if (RANGES.length) RANGES[RANGES.length-1].end = physiology_questions.length;
+    
     QUESTIONS_DATA = physiology_questions.map((q, i) => {
         const t = RANGES.find(r => i >= r.start && i < r.end) || RANGES[RANGES.length-1];
         let correct = []; if (q.answer) correct = String(q.answer).split(',').map(s => parseInt(s.trim())-1).filter(n=>!isNaN(n));
+        
+        const qText = escapeHtml(q.question);
+        const oText = (q.options||[]).map(o=>escapeHtml(o));
+        const searchString = (qText + ' ' + oText.join(' ') + ' ' + t.title).toLowerCase();
+
         return { 
             id: q.id, 
             topic: t?t.title:"Общее", 
-            question: escapeHtml(q.question), 
-            options: (q.options||[]).map(o=>escapeHtml(o)), 
+            question: qText, 
+            options: oText, 
             correctIndices: correct, 
-            image: q.image 
+            image: q.image,
+            searchString: searchString
         };
     });
     availableTopics = [...new Set(QUESTIONS_DATA.map(q => q.topic))];
@@ -405,16 +445,19 @@ const state = {
     isAnswerChecked: false, 
     lastResult: false, 
     isShuffleEnabled: false, 
-    comboStreak: 0, 
     hideAnswersInLearn: false, 
     isFlipped: false, 
     swipeX: 0, 
     animState: 'idle',
-    searchQuery: '' // Новое состояние для поиска
+    
+    // Новые поля для оптимизированного поиска
+    searchQuery: '',
+    filteredLearnQuestions: [], 
+    learnRenderLimit: 20,
+    searchCurrentIndex: -1
 };
 
 function init() { 
-    // Очищаем resumeState при старте, так как данные в памяти скорее всего потеряны
     state.resumeState = null;
     render(); 
 }
@@ -443,7 +486,7 @@ function toggleTopic(t) {
 }
 function toggleSelectAllTopics() { haptic('medium'); if(state.selectedTopics.length===availableTopics.length) state.selectedTopics=[]; else state.selectedTopics=[...availableTopics]; if(state.showFilterModal){updateTopicListUI('filter');updateSelectAllButtonUI('filter');} else render(); }
 
-// --- ЛОГИКА ДЛЯ СБРОСА ---
+// --- СБРОС ---
 function toggleResetTopic(t) { 
     if(state.resetSelectedTopics.includes(t)) state.resetSelectedTopics=state.resetSelectedTopics.filter(x=>x!==t); 
     else state.resetSelectedTopics.push(t); 
@@ -456,14 +499,9 @@ function toggleSelectAllReset() {
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
 
-// !!! ЛОГИКА ПОДТВЕРЖДЕНИЯ СБРОСА !!!
 function confirmReset() {
-    if(!state.resetSelectedTopics.length) {
-        haptic('error');
-        return;
-    }
+    if(!state.resetSelectedTopics.length) { haptic('error'); return; }
     haptic('warning');
-    // Закрываем окно выбора тем, чтобы не было наслоения
     state.showResetModal = false;
     state.showConfirmResetDialog = true;
     render(); 
@@ -473,51 +511,37 @@ function executeFinalReset() {
     haptic('success');
     const newProgress = {};
     const topicsToRemove = new Set(state.resetSelectedTopics);
-
     for (const [id, prog] of Object.entries(state.userProgress)) {
         const q = QUESTIONS_DATA.find(x => x.id == id);
-        if (!q) continue; // Garbage collection
-        if (topicsToRemove.has(q.topic)) continue; // Reset logic
+        if (!q) continue; 
+        if (topicsToRemove.has(q.topic)) continue; 
         newProgress[id] = prog;
     }
-
     state.userProgress = newProgress;
     state.resetSelectedTopics = []; 
-    state.showConfirmResetDialog = false; // Close confirm dialog
-    state.showResetModal = false; // Close topic selection modal
-
+    state.showConfirmResetDialog = false; 
     saveProgressToCloud();
     render();
 }
 
 function cancelReset() {
-    // Возвращаемся к выбору тем, а не в меню
     state.showConfirmResetDialog = false;
     state.showResetModal = true;
     render();
-    // При возврате нужно обновить UI списка (так как рендер полный, но DOM модального окна пересоздается)
-    setTimeout(() => {
-        updateTopicListUI('reset');
-        updateSelectAllButtonUI('reset');
-    }, 0);
+    setTimeout(() => { updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); }, 0);
 }
 
-// ОПТИМИЗИРОВАННЫЙ UI СПИСКА ТЕМ
 function updateTopicListUI(mode) {
     const listId = mode === 'filter' ? 'topics-list' : 'reset-topics-list';
     const list = document.getElementById(listId); if(!list) return;
-    
     const selectedArr = mode === 'filter' ? state.selectedTopics : state.resetSelectedTopics;
 
-    // Предварительный подсчет статистики, чтобы не бегать по QUESTIONS_DATA в цикле
     const stats = {};
     if (mode === 'filter') {
         QUESTIONS_DATA.forEach(q => {
             if (!stats[q.topic]) stats[q.topic] = { total: 0, correct: 0 };
             stats[q.topic].total++;
-            if (state.userProgress && state.userProgress[q.id]?.status === 'correct') {
-                stats[q.topic].correct++;
-            }
+            if (state.userProgress && state.userProgress[q.id]?.status === 'correct') stats[q.topic].correct++;
         });
     }
 
@@ -527,20 +551,14 @@ function updateTopicListUI(mode) {
         const icon = btn.querySelector('.icon-area');
         
         let btnClass = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click relative";
-        
         let progressHtml = '';
         if (mode === 'filter' && stats[t]) {
             const { total, correct } = stats[t];
             const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
-            
             let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
             let fillBg = sel ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-emerald-500';
             let txtColor = sel ? 'text-white/60 dark:text-black/60' : 'text-slate-400';
-
-            progressHtml = `
-                <div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div>
-                <div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>
-            `;
+            progressHtml = `<div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div><div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>`;
         }
 
         if(sel) { 
@@ -550,19 +568,13 @@ function updateTopicListUI(mode) {
             btnClass += " bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"; 
             if(icon) icon.innerHTML=''; 
         }
-        
         btn.className = btnClass;
-
         const contentDiv = btn.querySelector('.topic-content');
         if(contentDiv) contentDiv.innerHTML = `<span class="block text-wrap leading-tight pr-6 mb-1">${t}</span> ${progressHtml}`;
     });
-
     const applyId = mode === 'filter' ? 'apply-btn' : 'confirm-reset-btn';
     const apply = document.getElementById(applyId); 
-    if(apply) {
-        if (mode === 'filter') apply.innerText = `Применить (${selectedArr.length})`;
-        else apply.innerText = `Сбросить (${selectedArr.length})`;
-    }
+    if(apply) apply.innerText = mode === 'filter' ? `Применить (${selectedArr.length})` : `Сбросить (${selectedArr.length})`;
     lucide.createIcons();
 }
 
@@ -581,35 +593,31 @@ function getFilteredQuestions(mode) {
     return q;
 }
 
-// !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ STARTMODE !!!
 function startMode(mode, resume=false) {
     haptic('medium');
     
-    // Если пытаемся продолжить, но данных в памяти нет (после перезагрузки), начинаем сначала
-    if(resume && (!state.playableQuestions || state.playableQuestions.length === 0)) {
-        resume = false;
-    }
-
+    if(resume && (!state.playableQuestions || state.playableQuestions.length === 0)) resume = false;
     if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
     
     let q = getFilteredQuestions(mode);
     
-    // ЛОГИКА ФИЛЬТРАЦИИ РЕШЕННЫХ ВОПРОСОВ
     if (mode === 'quiz' || mode === 'cards') {
         const unsolved = q.filter(question => {
             const p = state.userProgress[question.id];
-            return !p || p.status !== 'correct'; // Оставляем только те, что НЕ решены или решены НЕВЕРНО
+            return !p || p.status !== 'correct';
         });
-        
-        if (unsolved.length > 0) {
-            q = unsolved;
-        }
+        if (unsolved.length > 0) q = unsolved;
     }
 
     if(!q.length){ alert("Нет вопросов!"); return; }
     
-    // Сброс поиска при входе в режим (для Learn)
-    state.searchQuery = '';
+    // Сброс для конспектов
+    if (mode === 'learn') {
+        state.searchQuery = '';
+        state.filteredLearnQuestions = q;
+        state.learnRenderLimit = 20;
+        state.searchCurrentIndex = -1;
+    }
 
     if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
     state.playableQuestions = q;
@@ -617,7 +625,6 @@ function startMode(mode, resume=false) {
     if (!state.userProgress) state.userProgress = {};
 
     state.currentQuestionIndex = 0;
-    
     state.view = mode;
     state.quizFinished = false;
     state.sessionAnswers = {}; 
@@ -633,18 +640,15 @@ function saveCurrentState() { state.sessionAnswers[state.currentQuestionIndex] =
 function loadStateForIndex(i) {
     const q = state.playableQuestions[i];
     if (!q) return resetQuestionState();
-    
     if (state.sessionAnswers[i]) {
         const s = state.sessionAnswers[i];
         state.selectedOptions = s.selectedOptions; state.isAnswerChecked = s.isAnswerChecked; state.lastResult = s.lastResult;
         return;
     }
-
     if (['quiz', 'cards', 'mistakes'].includes(state.view)) {
         resetQuestionState();
         return;
     }
-
     const history = state.userProgress && state.userProgress[q.id];
     if (history && history.selected) {
         state.selectedOptions = history.selected;
@@ -667,7 +671,6 @@ function checkAnswer() {
     state.lastResult=(sel===corr); haptic(state.lastResult?'success':'error');
     
     if(!state.userProgress) state.userProgress = {};
-    
     state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1, selected: [...state.selectedOptions] };
     saveCurrentState(); saveProgressToCloud(); render();
 }
@@ -690,17 +693,138 @@ function goHome() {
     state.view='menu'; render();
 }
 
-// ЛОГИКА ПОИСКА
-function handleSearch(val) {
-    state.searchQuery = val;
-    // При поиске скроллим вверх, чтобы видеть результаты
-    const content = document.querySelector('.layout-content');
-    if (content) content.scrollTop = 0;
-    render();
+// === ЛОГИКА ПОИСКА И ОПТИМИЗАЦИИ ===
+
+function handleSearchInput(val) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        state.searchQuery = val;
+        state.learnRenderLimit = 20; // Сбрасываем скролл
+        state.searchCurrentIndex = -1; // Сбрасываем навигацию
+        
+        // Фильтрация (по pre-calc строке)
+        if (!val.trim()) {
+            state.filteredLearnQuestions = state.playableQuestions;
+        } else {
+            const lowerVal = val.toLowerCase();
+            state.filteredLearnQuestions = state.playableQuestions.filter(q => q.searchString.includes(lowerVal));
+        }
+        
+        // Рендер только списка (не всего app)
+        renderLearnList();
+    }, 300); // 300ms debounce
 }
+
 function clearSearch() {
-    state.searchQuery = '';
-    render();
+    const input = document.getElementById('learn-search-input');
+    if(input) input.value = '';
+    handleSearchInput('');
+}
+
+function toggleAnswersVisibility() {
+    // Чистый CSS toggle
+    state.hideAnswersInLearn = !state.hideAnswersInLearn;
+    const container = document.getElementById('learn-list-container');
+    if (container) {
+        if (state.hideAnswersInLearn) container.classList.add('hide-answers');
+        else container.classList.remove('hide-answers');
+    }
+}
+
+// Навигация по результатам
+function navigateSearch(direction) {
+    if (state.filteredLearnQuestions.length === 0) return;
+    
+    if (direction === 'next') {
+        state.searchCurrentIndex++;
+        if (state.searchCurrentIndex >= state.filteredLearnQuestions.length) state.searchCurrentIndex = 0;
+    } else {
+        state.searchCurrentIndex--;
+        if (state.searchCurrentIndex < 0) state.searchCurrentIndex = state.filteredLearnQuestions.length - 1;
+    }
+
+    // Если элемент за пределами текущего рендера - увеличиваем лимит
+    if (state.searchCurrentIndex >= state.learnRenderLimit) {
+        state.learnRenderLimit = state.searchCurrentIndex + 5; // +запас
+        renderLearnList(); // Перерендериваем, чтобы элемент появился в DOM
+    } else {
+        // Просто обновляем подсветку активного элемента
+        renderLearnList(); 
+    }
+
+    // Скроллим
+    setTimeout(() => {
+        const targetId = `learn-q-${state.filteredLearnQuestions[state.searchCurrentIndex].id}`;
+        const el = document.getElementById(targetId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+}
+
+// Подсветка текста с экранированием
+function highlightText(text, query) {
+    if (!query || !query.trim()) return text;
+    // Экранируем спецсимволы для Regex
+    const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${safeQuery})`, 'gi');
+    return text.replace(regex, '<mark>$1</mark>');
+}
+
+// Рендер ТОЛЬКО списка конспектов (для производительности)
+function renderLearnList() {
+    const container = document.getElementById('learn-list-container');
+    if (!container) return; // Если мы не в Learn
+
+    const visibleItems = state.filteredLearnQuestions.slice(0, state.learnRenderLimit);
+    
+    const html = visibleItems.map((q, idx) => {
+        const isActive = idx === state.searchCurrentIndex;
+        // Подсветка (если есть поиск)
+        const qHtml = state.searchQuery ? highlightText(q.question, state.searchQuery) : q.question;
+        
+        return `
+        <div id="learn-q-${q.id}" class="border border-black dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-black shadow-sm mb-4 ${isActive ? 'active-search-result' : ''}">
+            <div class="bg-slate-100 dark:bg-slate-900 border-b border-black dark:border-slate-700 p-2 flex justify-between gap-4 px-4">
+                <span class="font-bold text-black dark:text-slate-300 text-[10px] tracking-widest uppercase flex-1">${q.topic}</span>
+                <span class="font-bold text-slate-500 dark:text-slate-400 text-[10px]">#${q.id}</span>
+            </div>
+            <div class="p-3 border-b border-black dark:border-slate-800 bg-white dark:bg-black">
+                ${q.image?`<img src="${q.image}" class="w-full h-auto max-h-40 object-contain mb-2 rounded border border-slate-100 dark:border-slate-800">`:''}
+                <div class="font-bold text-black dark:text-white leading-snug text-sm">${qHtml}</div>
+            </div>
+            <div class="divide-y divide-black dark:divide-slate-800">
+                ${q.options.map((opt, i) => {
+                    if(!opt||!opt.trim())return'';
+                    const cleanOpt = opt.replace(/^[\d]+[).]\s*/, '');
+                    const optHtml = state.searchQuery ? highlightText(cleanOpt, state.searchQuery) : cleanOpt;
+                    const isC = q.correctIndices.includes(i); 
+                    // Базовый класс
+                    let bgClass = "bg-white dark:bg-black text-black dark:text-slate-300";
+                    // Если ответ правильный - добавляем класс-маркер .correct-answer
+                    if(isC) bgClass += " correct-answer";
+                    
+                    return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bgClass}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bgClass}">${optHtml}</div></div>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }).join('');
+
+    // Добавляем sentinel
+    container.innerHTML = html + '<div id="learn-sentinel" class="h-10 w-full"></div>';
+    
+    // Обновляем observer
+    if (learnObserver) learnObserver.disconnect();
+    const sentinel = document.getElementById('learn-sentinel');
+    if (sentinel) {
+        learnObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                if (state.learnRenderLimit < state.filteredLearnQuestions.length) {
+                    state.learnRenderLimit += 20;
+                    renderLearnList(); // Рекурсивный до-рендер
+                }
+            }
+        }, { rootMargin: '200px' });
+        learnObserver.observe(sentinel);
+    }
 }
 
 function render() {
@@ -719,18 +843,15 @@ function render() {
     
     if(state.view==='cards') setTimeout(initCardEvents,0);
     
-    // Восстанавливаем скролл, если это не поиск (при поиске лучше быть наверху, или можно оставить как есть)
-    if(cd && scrollTop>0 && !state.searchQuery) document.querySelector('.layout-content').scrollTop=scrollTop;
-    
-    // Автофокус на поиск, если он активен и мы перерисовываем
-    if (state.view === 'learn' && state.searchQuery !== '') {
-        const input = document.getElementById('learn-search-input');
-        if(input) {
-            input.focus();
-            input.setSelectionRange(input.value.length, input.value.length);
-        }
+    // В Learn режиме инициализируем список вручную
+    if (state.view === 'learn') {
+        renderLearnList();
+        // Восстанавливаем CSS класс, если нужно
+        const container = document.getElementById('learn-list-container');
+        if (state.hideAnswersInLearn && container) container.classList.add('hide-answers');
     }
     
+    if(cd && scrollTop>0 && !state.searchQuery) document.querySelector('.layout-content').scrollTop=scrollTop;
     lucide.createIcons();
 }
 
@@ -778,61 +899,27 @@ function renderMenuContent() {
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-2xl font-black text-slate-900 dark:text-white">${learned}</span><span class="text-[9px] font-bold uppercase tracking-widest text-slate-400">Выучено</span></div>
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-[2rem] flex flex-col items-center justify-center"><span class="text-2xl font-black text-slate-900 dark:text-white">${errors}</span><span class="text-[9px] font-bold uppercase tracking-widest text-slate-400">Ошибок</span></div>
         </div>
-        <!-- КНОПКА СБРОСА -->
         <button onclick="toggleResetModal(true)" class="w-full mt-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 btn-click">Сбросить прогресс</button>
     </div>`;
 }
 
 function renderLearnContent() {
-    let qList = getFilteredQuestions('learn');
-    
-    // ЛОГИКА ПОИСКА (ФИЛЬТРАЦИЯ)
-    const isSearching = state.searchQuery && state.searchQuery.trim().length > 0;
-    if (isSearching) {
-        const query = state.searchQuery.toLowerCase();
-        qList = qList.filter(q => {
-            const inQuestion = q.question.toLowerCase().includes(query);
-            const inOptions = q.options.some(opt => opt.toLowerCase().includes(query));
-            const inTopic = q.topic.toLowerCase().includes(query);
-            return inQuestion || inOptions || inTopic;
-        });
-    }
-
     return `<div class="p-4 space-y-4 pb-20 animate-fade-in min-h-[50vh]">
-        <!-- ПОИСК И ТОГГЛ ОТВЕТОВ -->
         <div class="flex gap-2 mb-2 items-center">
             <div class="relative flex-1">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400"></i>
                 </div>
-                <input id="learn-search-input" type="text" value="${state.searchQuery}" oninput="handleSearch(this.value)" placeholder="Поиск по конспектам" class="search-input w-full pl-9 pr-8 py-2.5 bg-slate-100 dark:bg-slate-900 border border-transparent focus:border-slate-300 dark:focus:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none transition-all placeholder:font-medium">
-                ${state.searchQuery ? `<button onclick="clearSearch()" class="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x-circle" class="w-4 h-4 fill-current opacity-70"></i></button>` : ''}
+                <input id="learn-search-input" type="text" oninput="handleSearchInput(this.value)" placeholder="Поиск по конспектам" class="search-input w-full pl-9 pr-14 py-2.5 bg-slate-100 dark:bg-slate-900 border border-transparent focus:border-slate-300 dark:focus:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none transition-all placeholder:font-medium">
+                <div class="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
+                     ${state.searchQuery ? `<button onclick="navigateSearch('prev')" class="p-1 text-slate-400 hover:text-black dark:hover:text-white"><i data-lucide="chevron-up" class="w-4 h-4"></i></button><button onclick="navigateSearch('next')" class="p-1 text-slate-400 hover:text-black dark:hover:text-white"><i data-lucide="chevron-down" class="w-4 h-4"></i></button><button onclick="clearSearch()" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="x" class="w-4 h-4"></i></button>` : ''}
+                </div>
             </div>
-            <button onclick="state.hideAnswersInLearn=!state.hideAnswersInLearn;render()" class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl border btn-click transition-colors ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}"><i data-lucide="${state.hideAnswersInLearn?'eye':'eye-off'}" class="w-4 h-4"></i></button>
+            <button onclick="toggleAnswersVisibility()" class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl border btn-click transition-colors ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}"><i data-lucide="${state.hideAnswersInLearn?'eye':'eye-off'}" class="w-4 h-4"></i></button>
         </div>
-
-        ${qList.length === 0 ? 
-            `<div class="flex flex-col items-center justify-center pt-10 text-center opacity-50"><i data-lucide="search-x" class="w-12 h-12 text-slate-300 dark:text-slate-600 mb-2"></i><p class="text-xs font-bold text-slate-400">Ничего не найдено</p></div>` 
-            : 
-            qList.map(q => `
-            <div class="border border-black dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-black shadow-sm">
-                <div class="bg-slate-100 dark:bg-slate-900 border-b border-black dark:border-slate-700 p-2 flex justify-between gap-4 px-4"><span class="font-bold text-black dark:text-slate-300 text-[10px] tracking-widest uppercase flex-1">${q.topic}</span><span class="font-bold text-slate-500 dark:text-slate-400 text-[10px]">#${q.id}</span></div>
-                <div class="p-3 border-b border-black dark:border-slate-800 bg-white dark:bg-black">
-                    ${q.image?`<img src="${q.image}" class="w-full h-auto max-h-40 object-contain mb-2 rounded border border-slate-100 dark:border-slate-800">`:''}
-                    <div class="font-bold text-black dark:text-white leading-snug text-sm">${q.question}</div>
-                </div>
-                <div class="divide-y divide-black dark:divide-slate-800">
-                    ${q.options.map((opt, i) => {
-                        if(!opt||!opt.trim())return'';
-                        const cleanOpt = opt.replace(/^[\d]+[).]\s*/, '');
-                        const isC=q.correctIndices.includes(i); 
-                        let bg="bg-white dark:bg-black text-black dark:text-slate-300"; 
-                        if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] text-black dark:bg-[#FFD700] dark:text-black";
-                        return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bg}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bg}">${cleanOpt}</div></div>`;
-                    }).join('')}
-                </div>
-            </div>`).join('')
-        }
+        <div id="learn-list-container" class="learn-container transition-opacity duration-200">
+            <!-- Сюда рендерится список -->
+        </div>
     </div>`;
 }
 
@@ -864,7 +951,6 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
-            <!-- РАСПОРКА ДЛЯ СКРОЛЛА: ТЕПЕРЬ ОТВЕТЫ ВСЕГДА ВЫЛЕЗАЮТ ИЗ ПОД КНОПКИ -->
             <div class="h-[100px] w-full shrink-0"></div>
         </div>
     </div>`;
@@ -943,17 +1029,13 @@ function renderCardsFooter() {
 function renderFilterModal() {
     if(!state.showFilterModal) return '';
     const allSel=state.selectedTopics.length===availableTopics.length;
-    // Оптимизация: статистика считается внутри updateTopicListUI
     return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
             <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
             <div onclick="toggleShuffle()" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-4 cursor-pointer shrink-0 border border-slate-200 dark:border-slate-700 btn-click"><div class="flex items-center gap-3"><div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400"><i data-lucide="shuffle" class="w-5 h-5"></i></div><div class="text-left"><span class="block font-bold text-slate-900 dark:text-white text-sm">Случайный порядок</span><span class="text-xs text-slate-500 dark:text-slate-400">Перемешать вопросы</span></div></div><div class="w-12 h-6 rounded-full relative transition-colors ${state.isShuffleEnabled?'bg-indigo-500':'bg-slate-300 dark:bg-slate-600'}"><div class="w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${state.isShuffleEnabled?'left-7':'left-1'}"></div></div></div>
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{
-                    // Рендерим болванки, контент заполнится в updateTopicListUI для производительности
-                    return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area"></div></button>`
-                }).join('')}
+                ${availableTopics.map(t=>{return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area"></div></button>`}).join('')}
             </div>
             <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить</button>
         </div>
