@@ -39,14 +39,18 @@
     <style>
         /* --- БАЗА --- */
         :root {
-            /* Фолбэк на уровне CSS, если JS еще не отработал */
-            --tg-safe-top: 24px; 
+            /* FIX 1: Убрали 24px, ставим 0 по умолчанию */
+            --tg-safe-top: 0px; 
+            /* FIX 2: Переменная для реальной высоты вьюпорта */
+            --app-height: 100dvh;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
         html, body {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
+            position: fixed; top: 0; left: 0; width: 100%; 
+            /* FIX 2: Используем JS-вычисляемую высоту вместо 100vh */
+            height: var(--app-height);
             overflow: hidden; overscroll-behavior: none;
             background-color: #000; color: #000; font-family: 'Inter', sans-serif;
         }
@@ -59,17 +63,16 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ХЕДЕР И КОНТЕНТ (ЖЕЛЕЗНЫЙ FIX) --- */
+        /* --- ХЕДЕР И КОНТЕНТ (FIX 1: Safe Area) --- */
         .layout-header {
             flex-shrink: 0; width: 100%;
-            /* 12px отступа + безопасная зона (или 24px фолбэк) */
+            /* Базовый отступ 12px + то, что вернет API. Если API=0, будет просто 12px. */
             padding-top: calc(12px + var(--tg-safe-top));
             padding-bottom: 12px;
             padding-left: 16px; padding-right: 16px;
             background-color: inherit; z-index: 50;
             display: flex; align-items: center; justify-content: space-between;
             border-bottom: 1px solid rgba(0,0,0,0.05);
-            /* Плавность при изменении высоты, если Telegram обновит safe area на лету */
             transition: padding-top 0.2s ease;
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -211,43 +214,48 @@ try {
     tg.setHeaderColor('#ffffff'); 
 } catch(e){}
 
-// --- SAFE AREA LOGIC (ЖЕЛЕЗНЫЙ FIX) ---
-function updateSafeArea() {
+// --- FIX 1 & 2: LAYOUT AND SAFE AREA ---
+
+function updateLayout() {
+    // 1. SAFE AREA (TOP)
     try {
-        // 1. Пытаемся взять данные из API
-        // contentSafeAreaInset (новее) приоритетнее safeAreaInset
         const inset = tg.contentSafeAreaInset || tg.safeAreaInset || {};
-        let top = inset.top;
-
-        // 2. Фолбэк для ситуаций, когда API возвращает 0 или undefined,
-        // но мы явно в мобильном клиенте Telegram (iOS/Android).
-        // Это предотвращает "залипание" под шапку в первые миллисекунды или баги API.
-        if (!top && (tg.platform === 'ios' || tg.platform === 'android')) {
-            top = 24; // Безопасный минимум (статус бар)
-        }
-        
-        // Если вообще ничего не определилось (десктоп, веб вне ТГ), ставим 0,
-        // но в CSS у нас есть calc(12px + ...), так что совсем слипания не будет.
-        if (typeof top !== 'number') top = 0;
-
-        // 3. Обновляем CSS переменную
+        const top = inset.top || 0; // Строго то, что дает API. Без фолбэков.
         document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);
-    } catch(e) {
-        console.error('Safe area update failed', e);
+    } catch(e) {}
+
+    // 2. VISUAL VIEWPORT HEIGHT (KEYBOARD FIX)
+    // Используем visualViewport.height если доступен, иначе innerHeight.
+    // Это лечит белую полосу над клавиатурой в iOS.
+    if (window.visualViewport) {
+        document.documentElement.style.setProperty('--app-height', `${window.visualViewport.height}px`);
+    } else {
+        document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
     }
 }
 
-// Слушаем изменения вьюпорта и темы только один раз
-if (!window.safeAreaListenersAttached) {
-    tg.onEvent('viewportChanged', updateSafeArea);
-    tg.onEvent('themeChanged', updateSafeArea);
-    window.safeAreaListenersAttached = true;
+// Прикрепляем слушатели (только один раз)
+if (!window.layoutListenersAttached) {
+    // Событие Telegram
+    tg.onEvent('viewportChanged', updateLayout);
+    tg.onEvent('themeChanged', updateLayout);
+    
+    // События браузера/клавиатуры
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateLayout);
+        window.visualViewport.addEventListener('scroll', updateLayout);
+    }
+    window.addEventListener('resize', updateLayout);
+    
+    window.layoutListenersAttached = true;
 }
-// Вызываем сразу при загрузке скрипта
-updateSafeArea();
-// И еще раз после готовности WebApp, на случай если данные появились позже
+
+// Первичный вызов
+updateLayout();
 tg.ready();
-requestAnimationFrame(updateSafeArea);
+// Повторный вызов через фрейм, чтобы убедиться, что API загрузилось
+requestAnimationFrame(updateLayout);
+
 
 // --- HAPTIC & UTILS ---
 function haptic(type='light') {
