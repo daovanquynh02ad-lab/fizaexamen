@@ -8,7 +8,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <title>Imed</title>
+    <title>Imed Physiology</title>
     
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png">
@@ -24,14 +24,8 @@
             var script = document.createElement('script');
             script.src = 'questions.js?v=' + Date.now();
             script.async = true;
-            script.onload = function() {
-                window.isQuestionsLoaded = true;
-                if (window.onQuestionsReady) window.onQuestionsReady();
-            };
-            script.onerror = function() {
-                window.questionsLoadError = true;
-                if (window.onQuestionsError) window.onQuestionsError();
-            };
+            script.onload = function() { window.isQuestionsLoaded = true; if (window.onQuestionsReady) window.onQuestionsReady(); };
+            script.onerror = function() { window.questionsLoadError = true; if (window.onQuestionsError) window.onQuestionsError(); };
             document.head.appendChild(script);
         })();
     </script>
@@ -39,70 +33,54 @@
     <style>
         /* --- БАЗА --- */
         :root {
-            /* Динамическая переменная высоты для фикса клавиатуры на iOS */
-            --app-height: 100dvh;
+            --tg-viewport-height: 100vh;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
         html, body {
-            position: fixed; top: 0; left: 0; width: 100%; 
-            /* Используем JS-вычисляемую высоту вместо 100vh */
-            height: var(--app-height);
-            /* overflow: hidden важен, чтобы скроллился только layout-content */
-            overflow: hidden; overscroll-behavior: none;
+            width: 100%; 
+            /* Используем переменную для высоты, которую обновляет JS */
+            height: var(--tg-viewport-height);
             background-color: #000; color: #000; font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Скроллится только контент внутри */
         }
 
         #mobile-wrapper {
-            width: 100%; max-width: 480px; height: 100%;
+            width: 100%; max-width: 480px; 
+            height: 100%; /* Заполняет высоту body */
             background-color: #fff; margin: 0 auto;
             display: flex; flex-direction: column; position: relative;
         }
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- HEADER --- */
+        /* --- ХЕДЕР --- */
         .layout-header {
-            flex-shrink: 0;
-            width: 100%;
-            /* Отступ сверху с учетом Safe Area Telegram */
-            padding-top: calc(env(safe-area-inset-top) + 40px);
-            padding-bottom: 12px;
-            padding-left: 16px;
-            padding-right: 16px;
-            background-color: inherit;
-            z-index: 50;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            flex-shrink: 0; width: 100%;
+            padding-top: calc(env(safe-area-inset-top) + 12px);
+            padding-bottom: 12px; padding-left: 16px; padding-right: 16px;
+            background-color: inherit; z-index: 50;
+            display: flex; align-items: center; justify-content: space-between;
             border-bottom: 1px solid rgba(0,0,0,0.05);
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- CONTENT --- */
+        /* --- КОНТЕНТ --- */
         .layout-content {
-            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            flex: 1; 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch;
             width: 100%; position: relative; padding: 0;
-            
-            /* Базовый отступ снизу (для экранов без футера, например Menu/Learn) */
-            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+            /* Важный отступ снизу, чтобы футер не перекрывал контент */
+            padding-bottom: 120px; 
         }
         .layout-content::-webkit-scrollbar { display: none; }
 
-        /* --- СПЕЦ-ОТСТУПЫ ДЛЯ ЭКРАНОВ С ФУТЕРОМ --- */
-        /* Только когда есть футер (quiz, cards, mistakes), делаем большой отступ */
-        #app[data-view="quiz"] .layout-content,
-        #app[data-view="cards"] .layout-content,
-        #app[data-view="mistakes"] .layout-content {
-            padding-bottom: calc(130px + env(safe-area-inset-bottom));
-        }
-
-        /* --- FOOTER --- */
+        /* --- ФУТЕР --- */
         .layout-footer {
             position: absolute; bottom: 0; left: 0; width: 100%;
             padding: 12px 16px; 
-            /* Учет "домика" на iPhone */
             padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
             background-color: inherit; z-index: 100;
             border-top: 1px solid rgba(0,0,0,0.05);
@@ -110,7 +88,28 @@
         }
         .dark .layout-footer { border-top: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- UI ЭЛЕМЕНТЫ --- */
+        /* --- ПОИСК И ПОДСВЕТКА --- */
+        mark { background-color: #3b82f6; color: white; border-radius: 4px; padding: 0 2px; font-weight: bold; }
+        .dark mark { background-color: #3b82f6; color: white; }
+
+        .correct-answer { background-color: #FFD700 !important; color: #000 !important; }
+        .dark .correct-answer { background-color: #FFD700 !important; color: #000 !important; }
+
+        .correct-answer mark { background-color: #1d4ed8 !important; color: white !important; box-shadow: 0 0 0 1px white; }
+        
+        .learn-container.hide-answers .correct-answer { background-color: #fff !important; color: #000 !important; }
+        .dark .learn-container.hide-answers .correct-answer { background-color: #000 !important; color: #cbd5e1 !important; }
+
+        .active-search-result { box-shadow: 0 0 0 3px #3b82f6 !important; border-color: #3b82f6 !important; }
+
+        .search-controls {
+            display: flex; align-items: center; gap: 2px;
+            opacity: 0; pointer-events: none; transition: opacity 0.15s ease;
+        }
+        .search-controls.visible { opacity: 1; pointer-events: auto; }
+        .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+
+        /* --- АНИМАЦИИ --- */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translate3d(0,0,0); }
@@ -126,30 +125,21 @@
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
 
-        #intro-layer, #auth-screen, #block-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        /* ЭКРАНЫ */
+        #intro-layer, #auth-screen, #block-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
         #intro-layer { background: #000; }
         #auth-screen, #block-screen { background-color: inherit; }
         #intro-video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
         #start-text { z-index: 10000; cursor: pointer; position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         .hidden-force { display: none !important; }
         #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
-
-        .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
-        .learn-container .correct-answer { background-color: #FFD700 !important; color: #000 !important; }
-        .dark .learn-container .correct-answer { background-color: #FFD700 !important; color: #000 !important; }
-        .learn-container.hide-answers .correct-answer { background-color: #fff !important; color: #000 !important; }
-        .dark .learn-container.hide-answers .correct-answer { background-color: #000 !important; color: #cbd5e1 !important; }
-        mark { background-color: rgba(250, 204, 21, 0.5); color: inherit; border-radius: 2px; padding: 0 1px; }
-        .dark mark { background-color: rgba(250, 204, 21, 0.3); color: white; }
-        .active-search-result { box-shadow: 0 0 0 2px #FFD700; }
-        .dark .active-search-result { box-shadow: 0 0 0 2px #FFD700; }
     </style>
     
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: { extend: { colors: { gold: '#FFD700' } } }
-        }
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { gold: '#FFD700' } } } }
     </script>
 </head>
 <body class="bg-slate-50 text-slate-900 transition-colors duration-300 selection:bg-[#FFD700] selection:text-black">
@@ -166,17 +156,13 @@
         <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
         <p class="text-slate-500 font-medium">Проверка доступа...</p>
     </div>
-
     <div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center"></div>
-
     <div id="app" class="hidden-force"></div>
 </div>
 
 <script>
-// --- КОНФИГУРАЦИЯ ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaq2gIrn50O6-2_8DH5Gy-1UpeT8BYFwcPvIasPKfBXT5shXnBSPbTWWPsOOUkor78/exec";
 
-// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
 let QUESTIONS_DATA = [];
 let availableTopics = [];
 let accessData = null; 
@@ -185,48 +171,33 @@ let accessError = null;
 let currentUserId = null;
 let isSaving = false;
 
-// Поиск и Infinite Scroll
 let searchDebounceTimer = null;
 let learnObserver = null;
 
 const tg = window.Telegram.WebApp;
 
-// Инициализация WebApp
+// --- FIX VIEWPORT HEIGHT (IOS KEYBOARD) ---
+function updateAppHeight() {
+    // Используем viewportStableHeight от Telegram, если доступен, иначе fallback
+    const h = tg.viewportStableHeight || window.innerHeight;
+    document.documentElement.style.setProperty('--tg-viewport-height', `${h}px`);
+}
+
+// Инициализация WebApp и слушателей высоты
 try { 
     tg.expand(); 
     tg.requestFullscreen(); 
     if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; 
     tg.setHeaderColor('#ffffff'); 
+    
+    // Слушаем изменение вьюпорта (клавиатура, поворот)
+    tg.onEvent('viewportChanged', updateAppHeight);
+    window.addEventListener('resize', updateAppHeight);
+    window.addEventListener('orientationchange', updateAppHeight);
+    // Первичный вызов
+    updateAppHeight();
 } catch(e){}
 
-// --- FIX: VISUAL VIEWPORT (Клавиатура iOS) ---
-function updateAppHeight() {
-    let vh;
-    if (window.visualViewport) {
-        // Используем высоту visualViewport для корректного учета клавиатуры
-        vh = window.visualViewport.height;
-    } else {
-        vh = window.innerHeight;
-    }
-    // Ставим высоту через CSS-переменную
-    document.documentElement.style.setProperty('--app-height', `${vh}px`);
-}
-
-// Вешаем слушатели на все возможные изменения геометрии
-if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateAppHeight);
-    window.visualViewport.addEventListener('scroll', updateAppHeight); // Иногда iOS скроллит visualViewport
-}
-window.addEventListener('resize', updateAppHeight);
-window.addEventListener('orientationchange', () => {
-    // Небольшая задержка, чтобы браузер успел пересчитать
-    setTimeout(updateAppHeight, 100);
-});
-
-// Первичный вызов
-updateAppHeight();
-
-// --- HAPTIC & UTILS ---
 function haptic(type='light') {
     try {
         if(tg.HapticFeedback) {
@@ -239,19 +210,15 @@ function haptic(type='light') {
 document.addEventListener('touchstart', (e)=>{if(e.touches[0].clientX<40){window.sx=e.touches[0].clientX;window.sy=e.touches[0].clientY;window.sw=true}else{window.sw=false}},{passive:true});
 document.addEventListener('touchend', (e)=>{if(!window.sw)return;const ex=e.changedTouches[0].clientX;const ey=e.changedTouches[0].clientY;if((ex-window.sx)>60 && Math.abs(ey-window.sy)<50){haptic('medium');goHome();}window.sw=false},{passive:true});
 
-// --- СТАРТ И ЗАГРУЗКА ---
 async function userClickedStart() {
     haptic('medium'); 
-    const txt = document.getElementById('start-text'); if(txt) txt.remove();
+    document.getElementById('start-text')?.remove();
     const vid=document.getElementById('intro-video');
     performAccessCheck();
-    let played = false;
-    try { vid.muted=false; await vid.play(); played = true; vid.onended=()=>{ finishVideo(); }; } catch(err){ console.log("Video fail", err); }
-    if (!played) finishVideo();
+    try { vid.muted=false; await vid.play(); vid.onended=()=>{ finishVideo(); }; } catch(err){ finishVideo(); }
 }
 
 function finishVideo() { videoFinished = true; checkStateTransition(); }
-
 window.onQuestionsReady = () => { if(accessData || videoFinished) performAccessCheck(); };
 window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); };
 
@@ -262,54 +229,30 @@ async function performAccessCheck() {
     }
     
     currentUserId = tg.initDataUnsafe?.user?.id;
-    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user';
-
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
     if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
     
     const ck = `imed_access_v2_${currentUserId}`; 
-
     try{
         const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
         const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}`,{signal:ctrl.signal});
         const data=await res.json();
-        
         if(data.allowed){ 
             accessData=data; 
-            if (data.progress) state.userProgress = data.progress;
-            else { const localP=localStorage.getItem(`imed_progress_${currentUserId}`); if(localP) state.userProgress=JSON.parse(localP); }
-            
-            if (data.selectedTopics) state.selectedTopics = data.selectedTopics;
-            else { const localT=localStorage.getItem(`imed_topics_${currentUserId}`); if(localT) state.selectedTopics=JSON.parse(localT); }
-            
+            state.userProgress = data.progress || {};
+            state.selectedTopics = data.selectedTopics || [];
             localStorage.setItem(ck,JSON.stringify(data)); 
             localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
             localStorage.setItem(`imed_topics_${currentUserId}`, JSON.stringify(state.selectedTopics));
             processQuestions(); 
         } else {
-            localStorage.removeItem(ck);
-            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
+            localStorage.removeItem(ck); accessError={type:'denied', msg:'Доступ закрыт.'};
         }
     } catch(e){ 
         const c = localStorage.getItem(ck);
-        const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
-        const localT = localStorage.getItem(`imed_topics_${currentUserId}`);
-        if(c){ 
-            try{ 
-                const p=JSON.parse(c); 
-                if(p.allowed){ 
-                    accessData=p; 
-                    if (localP) state.userProgress = JSON.parse(localP);
-                    if (localT) state.selectedTopics = JSON.parse(localT);
-                    processQuestions(); 
-                } 
-            } catch(err){ localStorage.removeItem(ck); } 
-        }
-        if (!accessData) accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
+        if(c){ const p=JSON.parse(c); if(p.allowed){ accessData=p; state.userProgress = JSON.parse(localStorage.getItem(`imed_progress_${currentUserId}`)||'{}'); state.selectedTopics = JSON.parse(localStorage.getItem(`imed_topics_${currentUserId}`)||'[]'); processQuestions(); } }
+        else accessError={type:'network', msg:'Ошибка сети.'}; 
     }
-    
-    if (!state.userProgress) state.userProgress = {};
-    if (!state.selectedTopics) state.selectedTopics = [];
     checkStateTransition();
 }
 
@@ -318,10 +261,8 @@ async function saveProgressToCloud() {
     isSaving = true;
     localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
     localStorage.setItem(`imed_topics_${currentUserId}`, JSON.stringify(state.selectedTopics));
-    
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
-
     try {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST', mode: 'no-cors',
@@ -337,85 +278,35 @@ function checkStateTransition() {
     const intro=document.getElementById('intro-layer'), auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen'), app=document.getElementById('app');
     if (videoFinished && !accessData && !accessError) { if(intro) intro.style.display='none'; auth.classList.remove('hidden-force'); return; }
     if(accessError){ 
-        if(intro) intro.style.display='none'; 
-        auth.classList.add('hidden-force'); block.classList.remove('hidden-force');
-        let icon='alert-triangle', title='Ошибка', colorClass='text-rose-500', bgClass='bg-rose-100 dark:bg-rose-900/30';
-        if(accessError.type==='denied'){icon='lock';title='Доступ закрыт';} else if(accessError.type==='browser'){icon='smartphone';title='Только в Telegram';}
-        block.innerHTML=`<div class="flex flex-col items-center justify-center h-full animate-fade-in px-4"><div class="${bgClass} p-6 rounded-full mb-6"><i data-lucide="${icon}" class="w-16 h-16 ${colorClass}"></i></div><h1 class="text-3xl font-black text-slate-900 dark:text-white mb-4">${title}</h1><p class="text-slate-500 dark:text-slate-400 mb-10 max-w-sm font-medium leading-relaxed">${accessError.msg}</p>${accessError.type==='denied'?`<a href="https://t.me/stewonly" class="w-full max-w-xs bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold text-center shadow-lg btn-click transition-transform active:scale-95">Связаться с админом</a>`:`<button onclick="window.location.reload()" class="w-full max-w-xs bg-slate-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Попробовать снова</button>`}</div>`;
+        intro.style.display='none'; auth.classList.add('hidden-force'); block.classList.remove('hidden-force');
+        let icon='alert-triangle', title='Ошибка';
+        if(accessError.type==='denied'){icon='lock';title='Доступ закрыт';}
+        block.innerHTML=`<div class="flex flex-col items-center justify-center h-full animate-fade-in px-4"><div class="bg-rose-100 dark:bg-rose-900/30 p-6 rounded-full mb-6"><i data-lucide="${icon}" class="w-16 h-16 text-rose-500"></i></div><h1 class="text-3xl font-black text-slate-900 dark:text-white mb-4">${title}</h1><p class="text-slate-500 dark:text-slate-400 mb-10 max-w-sm font-medium text-center">${accessError.msg}</p><button onclick="window.location.reload()" class="w-full max-w-xs bg-slate-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Попробовать снова</button></div>`;
         lucide.createIcons(); return; 
     }
     if(accessData){
-        if(intro){ intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; setTimeout(()=>{intro.style.display='none';auth.classList.add('hidden-force');app.classList.remove('hidden-force');init();},300); } 
-        else { auth.classList.add('hidden-force'); app.classList.remove('hidden-force'); init(); }
+        intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; setTimeout(()=>{intro.style.display='none';auth.classList.add('hidden-force');app.classList.remove('hidden-force');init();},300);
     }
 }
 
-// --- ДАННЫЕ И ТЕМЫ ---
 const TOPIC_MAP = [
-    { pages: 3,  title: "1. Биологические мембраны и транспорт веществ" },       
-    { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" },                 
-    { pages: 5,  title: "3. Физиология клетки и тканей" },             
-    { pages: 15, title: "4. Анатомия опорно-двигательного аппарата" },              
-    { pages: 2,  title: "5. Анатомия дыхательной системы" },       
-    { pages: 7,  title: "6. Анатомия желудочно-кишечного тракта" },              
-    { pages: 2,  title: "7. Анатомия выделительной системы" },     
-    { pages: 4,  title: "8. Анатомия сердечно-сосудистой системы" },              
-    { pages: 22, title: "9. Физиология крови: форменные элементы" },  
-    { pages: 15, title: "10. Буферные системы крови и группы крови" }, 
-    { pages: 10, title: "11. Физиология сердца: автоматизм и возбудимость" },        
-    { pages: 10, title: "12. Регуляция сердечной деятельности" },         
-    { pages: 13, title: "13. Гемодинамика и микроциркуляция" },             
-    { pages: 4,  title: "14. Регуляция кровообращения" }, 
-    { pages: 19, title: "15. Функции почек и мочеобразование" },            
-    { pages: 9,  title: "16. Регуляция функции почек" },           
-    { pages: 11, title: "17. Пищеварение в полости рта и желудке" },
-    { pages: 14, title: "18. Пищеварение в кишечнике, роль поджелудочной и печени" },   
-    { pages: 16, title: "19. Регуляция пищеварения и всасывание" },     
-    { pages: 7,  title: "20. Обмен веществ и питание" },             
-    { pages: 10, title: "21. Обмен энергии и термометрия" },            
-    { pages: 9,  title: "22. Терморегуляция" },            
-    { pages: 18, title: "23. Физиология дыхания: вентиляция легких" },       
-    { pages: 7,  title: "24. Газообмен в легких и тканях" },                
-    { pages: 8,  title: "25. Транспорт газов кровью (Гемоглобин)" },                
-    { pages: 8,  title: "26. Регуляция дыхания" },        
-    { pages: 7,  title: "27. Общая физиология эндокринной системы" },      
-    { pages: 12, title: "28. Частная физиология эндокринных желез" },    
-    { pages: 19, title: "29. Физиология возбудимых тканей" },             
-    { pages: 10, title: "30. Нервные волокна и синаптическая передача" },            
-    { pages: 10, title: "31. Физиология мышц и мышечного сокращения" },           
-    { pages: 10, title: "32. ЦНС: Нейроны и нервные центры" },      
-    { pages: 11, title: "33. ЦНС: Рефлекторная деятельность и торможение" }, 
-    { pages: 18, title: "34. Частная физиология ЦНС (Спинной и головной мозг)" },    
-    { pages: 18, title: "35. Вегетативная нервная система (ВНС)" },                       
-    { pages: 11, title: "36. Сенсорные системы: общие принципы" },  
-    { pages: 4,  title: "37. Обонятельная и вкусовая сенсорные системы" },            
-    { pages: 4,  title: "38. Соматосенсорная система и физиология боли" },                  
-    { pages: 14, title: "39. Зрительная сенсорная система" },                   
-    { pages: 6,  title: "40. Слуховая и вестибулярная системы" },        
-    { pages: 6,  title: "41. ВНД: Условные и безусловные рефлексы" },     
-    { pages: 16, title: "42. ВНД: Типы, память, сон, эмоции" },     
-    { pages: 17, title: "43. Адаптация и экологическая физиология" },     
-    { pages: 52, title: "44. Возрастная физиология" }     
+    { pages: 3,  title: "1. Биологические мембраны и транспорт веществ" }, { pages: 4,  title: "2. Клеточные рецепторы и внутриклеточная сигнализация" }, { pages: 5,  title: "3. Физиология клетки и тканей" }, { pages: 15, title: "4. Анатомия опорно-двигательного аппарата" }, { pages: 2,  title: "5. Анатомия дыхательной системы" }, { pages: 7,  title: "6. Анатомия желудочно-кишечного тракта" }, { pages: 2,  title: "7. Анатомия выделительной системы" }, { pages: 4,  title: "8. Анатомия сердечно-сосудистой системы" }, { pages: 22, title: "9. Физиология крови: форменные элементы" }, { pages: 15, title: "10. Буферные системы крови и группы крови" }, { pages: 10, title: "11. Физиология сердца: автоматизм и возбудимость" }, { pages: 10, title: "12. Регуляция сердечной деятельности" }, { pages: 13, title: "13. Гемодинамика и микроциркуляция" }, { pages: 4,  title: "14. Регуляция кровообращения" }, { pages: 19, title: "15. Функции почек и мочеобразование" }, { pages: 9,  title: "16. Регуляция функции почек" }, { pages: 11, title: "17. Пищеварение в полости рта и желудке" }, { pages: 14, title: "18. Пищеварение в кишечнике, роль поджелудочной и печени" }, { pages: 16, title: "19. Регуляция пищеварения и всасывание" }, { pages: 7,  title: "20. Обмен веществ и питание" }, { pages: 10, title: "21. Обмен энергии и термометрия" }, { pages: 9,  title: "22. Терморегуляция" }, { pages: 18, title: "23. Физиология дыхания: вентиляция легких" }, { pages: 7,  title: "24. Газообмен в легких и тканях" }, { pages: 8,  title: "25. Транспорт газов кровью (Гемоглобин)" }, { pages: 8,  title: "26. Регуляция дыхания" }, { pages: 7,  title: "27. Общая физиология эндокринной системы" }, { pages: 12, title: "28. Частная физиология эндокринных желез" }, { pages: 19, title: "29. Физиология возбудимых тканей" }, { pages: 10, title: "30. Нервные волокна и синаптическая передача" }, { pages: 10, title: "31. Физиология мышц и мышечного сокращения" }, { pages: 10, title: "32. ЦНС: Нейроны и нервные центры" }, { pages: 11, title: "33. ЦНС: Рефлекторная деятельность и торможение" }, { pages: 18, title: "34. Частная физиология ЦНС (Спинной и головной мозг)" }, { pages: 18, title: "35. Вегетативная нервная система (ВНС)" }, { pages: 11, title: "36. Сенсорные системы: общие принципы" }, { pages: 4,  title: "37. Обонятельная и вкусовая сенсорные системы" }, { pages: 4,  title: "38. Соматосенсорная система и физиология боли" }, { pages: 14, title: "39. Зрительная сенсорная система" }, { pages: 6,  title: "40. Слуховая и вестибулярная системы" }, { pages: 6,  title: "41. ВНД: Условные и безусловные рефлексы" }, { pages: 16, title: "42. ВНД: Типы, память, сон, эмоции" }, { pages: 17, title: "43. Адаптация и экологическая физиология" }, { pages: 52, title: "44. Возрастная физиология" }
 ];
 
 function escapeHtml(t) { if(!t)return""; return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 function processQuestions() {
     if (typeof physiology_questions === 'undefined') return;
-    const totalPages = TOPIC_MAP.reduce((s, t) => s + t.pages, 0);
-    const qPerPage = physiology_questions.length / totalPages;
+    const qPerPage = physiology_questions.length / TOPIC_MAP.reduce((s,t)=>s+t.pages,0);
     let acc = 0;
     const RANGES = TOPIC_MAP.map(t => { const s=acc; acc+=Math.round(t.pages*qPerPage); return {title:t.title,start:s,end:acc}; });
-    if (RANGES.length) RANGES[RANGES.length-1].end = physiology_questions.length;
     
     QUESTIONS_DATA = physiology_questions.map((q, i) => {
         const t = RANGES.find(r => i >= r.start && i < r.end) || RANGES[RANGES.length-1];
         let correct = []; if (q.answer) correct = String(q.answer).split(',').map(s => parseInt(s.trim())-1).filter(n=>!isNaN(n));
         const qText = escapeHtml(q.question);
         const oText = (q.options||[]).map(o=>escapeHtml(o));
-        
         const cleanTopic = t ? t.title.replace(/^\s*\d+\s*[\.\)\-:]\s*/, '') : "";
-        
         return { 
             id: q.id, topic: t?t.title:"Общее", question: qText, options: oText, correctIndices: correct, image: q.image,
             searchString: (qText + ' ' + oText.join(' ') + ' ' + cleanTopic).toLowerCase()
@@ -425,7 +316,6 @@ function processQuestions() {
     if (state.selectedTopics.length === 0) state.selectedTopics = [...availableTopics];
 }
 
-// --- STATE ---
 const state = { 
     view: 'menu', isDark: false, showFilterModal: false, showResetModal: false, showConfirmResetDialog: false, 
     selectedTopics: [], resetSelectedTopics: [], userProgress: {}, resumeState: null, playableQuestions: [], 
@@ -436,37 +326,17 @@ const state = {
 
 function init() { state.resumeState = null; render(); }
 
-// --- THEME & UTILS ---
 function toggleTheme() {
     haptic('light'); state.isDark = !state.isDark;
-    const body=document.documentElement, auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen');
-    if(state.isDark) { body.classList.add('dark'); if(auth)auth.style.backgroundColor='#000'; if(block)block.style.backgroundColor='#000'; try{tg.setHeaderColor('#000000');}catch(e){} }
-    else { body.classList.remove('dark'); if(auth)auth.style.backgroundColor='#fff'; if(block)block.style.backgroundColor='#fff'; try{tg.setHeaderColor('#ffffff');}catch(e){} }
+    const body=document.documentElement;
+    if(state.isDark) { body.classList.add('dark'); tg.setHeaderColor('#000000'); }
+    else { body.classList.remove('dark'); tg.setHeaderColor('#ffffff'); }
     render();
 }
 
 function toggleFilterModal(show) { if(show)haptic('light'); state.showFilterModal=show; render(); }
 function toggleResetModal(show) { if(show) { haptic('light'); state.resetSelectedTopics = []; } state.showResetModal=show; render(); }
-
-function toggleShuffle() { 
-    haptic('light'); 
-    state.isShuffleEnabled=!state.isShuffleEnabled; 
-    const knob = document.getElementById('shuffle-toggle-knob');
-    const bg = document.getElementById('shuffle-toggle-bg');
-    if(knob && bg) {
-        if(state.isShuffleEnabled) {
-            bg.classList.remove('bg-slate-300', 'dark:bg-slate-600');
-            bg.classList.add('bg-indigo-500');
-            knob.classList.remove('left-1');
-            knob.classList.add('left-7');
-        } else {
-            bg.classList.add('bg-slate-300', 'dark:bg-slate-600');
-            bg.classList.remove('bg-indigo-500');
-            knob.classList.add('left-1');
-            knob.classList.remove('left-7');
-        }
-    }
-}
+function toggleShuffle() { haptic('light'); state.isShuffleEnabled=!state.isShuffleEnabled; render(); }
 
 function toggleTopic(t) { 
     if(state.selectedTopics.includes(t)) state.selectedTopics=state.selectedTopics.filter(x=>x!==t); 
@@ -552,7 +422,6 @@ function updateSelectAllButtonUI(mode) {
     lucide.createIcons();
 }
 
-// --- РЕЖИМЫ (Start Mode) ---
 function startMode(mode, resume=false) {
     haptic('medium');
     if(resume && (!state.playableQuestions || state.playableQuestions.length === 0)) resume = false;
@@ -566,7 +435,6 @@ function startMode(mode, resume=false) {
     }
     if(!q.length){ alert("Нет вопросов!"); return; }
     
-    // Сброс для конспектов
     if (mode === 'learn') {
         state.searchQuery = '';
         state.filteredLearnQuestions = q;
@@ -625,13 +493,13 @@ function goHome() {
     state.view='menu'; render();
 }
 
-// === ПОИСК (ИСПРАВЛЕННАЯ ЛОГИКА WORD-BOUNDARY) ===
+// === ПОИСК ===
 
-// Вспомогательная функция для экранирования спецсимволов Regex
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
 }
 
+// FIX: Синхронизация видимости кнопок с состоянием
 function updateSearchUI() {
     const controls = document.getElementById('search-controls');
     if (!controls) return;
@@ -640,9 +508,11 @@ function updateSearchUI() {
 }
 
 function handleSearchInput(val) {
+    // FIX: Сразу обновляем состояние и UI, чтобы не было задержки кнопок
     state.searchQuery = val;
     updateSearchUI(); 
     
+    // Дебаунс только для тяжелой фильтрации
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
         state.learnRenderLimit = 20;
@@ -653,21 +523,13 @@ function handleSearchInput(val) {
         if (!trimmed) {
             state.filteredLearnQuestions = state.playableQuestions;
         } else {
-            // Разбиваем запрос на слова
             const words = trimmed.split(/\s+/).filter(w => w.length > 0);
-            
-            // Создаем массив RegExp для каждого слова с границами слова
-            // Граница слова: начало строки (^) или не буква/цифра ([^a-zA-Zа-яА-ЯёЁ0-9])
-            // И конец: конец строки ($) или не буква/цифра
             const regexes = words.map(w => {
                 const escaped = escapeRegExp(w);
-                // Используем unicode-совместимую логику границ для кириллицы
-                // Ищем слово, окруженное не-буквами/не-цифрами или началом/концом строки
                 return new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])${escaped}(?=$|[^a-zA-Zа-яА-ЯёЁ0-9])`, 'i');
             });
             
             state.filteredLearnQuestions = state.playableQuestions.filter(q => {
-                // Вопрос должен содержать ВСЕ слова из запроса (как целые слова)
                 return regexes.every(rx => rx.test(q.searchString));
             });
         }
@@ -690,11 +552,10 @@ function toggleAnswersVisibility() {
 
 function navigateSearch(direction) {
     haptic('light');
-    document.activeElement?.blur(); // Скрыть клавиатуру
+    document.activeElement?.blur(); 
     
     if (state.filteredLearnQuestions.length === 0) return;
     
-    // Удаляем подсветку с предыдущего
     if(state.searchCurrentIndex >= 0) {
         const prevId = `learn-q-${state.filteredLearnQuestions[state.searchCurrentIndex]?.id}`;
         const prevEl = document.getElementById(prevId);
@@ -702,21 +563,12 @@ function navigateSearch(direction) {
     }
 
     if (direction === 'next') {
-        // Убрали зацикливание
-        if (state.searchCurrentIndex < state.filteredLearnQuestions.length - 1) {
-            state.searchCurrentIndex++;
-        }
+        if (state.searchCurrentIndex < state.filteredLearnQuestions.length - 1) state.searchCurrentIndex++;
     } else {
-        // Убрали зацикливание
-        if (state.searchCurrentIndex > 0) {
-            state.searchCurrentIndex--;
-        }
+        if (state.searchCurrentIndex > 0) state.searchCurrentIndex--;
     }
     
-    // Если индекс был -1 (начало), ставим 0 при нажатии 'next'
-    if (state.searchCurrentIndex === -1 && direction === 'next') {
-        state.searchCurrentIndex = 0;
-    }
+    if (state.searchCurrentIndex === -1 && direction === 'next') state.searchCurrentIndex = 0;
 
     if (state.searchCurrentIndex >= 0 && state.searchCurrentIndex < state.filteredLearnQuestions.length) {
         if (state.searchCurrentIndex >= state.learnRenderLimit) {
@@ -741,20 +593,13 @@ function scrollToCurrentMatch() {
 
 function highlightText(text, query) {
     if (!query || !query.trim()) return text;
-    
-    // Разбиваем запрос на слова для подсветки
     const words = query.trim().split(/\s+/).filter(w => w.length > 0);
     let highlighted = text;
-    
-    // Подсвечиваем каждое слово отдельно
     words.forEach(w => {
         const escaped = escapeRegExp(w);
-        // Используем ту же логику границ слова для замены
-        // Группы сохранения ($1) и ($2) нужны, чтобы не затереть символы-границы (пробелы, знаки препинания)
         const regex = new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])(${escaped})(?=$|[^a-zA-Zа-яА-ЯёЁ0-9])`, 'gi');
         highlighted = highlighted.replace(regex, '$1<mark>$2</mark>');
     });
-    
     return highlighted;
 }
 
@@ -806,7 +651,6 @@ function renderLearnList() {
     }
 }
 
-// --- RENDERING ---
 function render() {
     const app=document.getElementById('app');
     let scrollTop=0; const cd=document.querySelector('.layout-content');
@@ -825,7 +669,7 @@ function render() {
     
     if (state.view === 'learn') {
         renderLearnList();
-        updateSearchUI(); // Восстанавливаем кнопки, если был поиск
+        updateSearchUI(); 
         const container = document.getElementById('learn-list-container');
         if (state.hideAnswersInLearn && container) container.classList.add('hide-answers');
     }
