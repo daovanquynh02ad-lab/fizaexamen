@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <!-- interactive-widget=resizes-content позволяет клавиатуре сжимать область просмотра, а не перекрывать её -->
+    <!-- interactive-widget=resizes-content обязателен для iOS, чтобы клавиатура сжимала окно, а не накладывалась -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -41,19 +41,20 @@
         /* --- БАЗА --- */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
-        /* ИСПРАВЛЕНИЕ ПУСТОТ: Используем dvh (Dynamic Viewport Height) */
+        /* ФОН И ВЫСОТА: Жесткая фиксация, цвет фона совпадает с приложением (slate-50) */
         html {
             height: 100dvh;
-            background-color: #f8fafc; /* slate-50 чтобы фон совпадал */
+            background-color: #f8fafc; /* bg-slate-50 */
+            overscroll-behavior: none;
         }
         body {
             position: fixed; 
             top: 0; left: 0;
             width: 100%; 
-            height: 100dvh; /* Важно: динамическая высота */
+            height: 100dvh;
             overflow: hidden; 
             overscroll-behavior: none;
-            background-color: #f8fafc; /* slate-50 */
+            background-color: #f8fafc; /* bg-slate-50 */
             color: #000; font-family: 'Inter', sans-serif;
         }
         .dark html, .dark body { background-color: #000; }
@@ -66,7 +67,7 @@
         @media (min-width: 481px) { #mobile-wrapper { box-shadow: 0 0 50px rgba(255,255,255,0.1); } }
         .dark #mobile-wrapper { background-color: #000; }
 
-        /* --- ХЕДЕР (БЕЗ ИЗМЕНЕНИЙ) --- */
+        /* --- ХЕДЕР --- */
         .layout-header {
             flex-shrink: 0;
             width: 100%;
@@ -83,7 +84,7 @@
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КОНТЕНТ (ИСПРАВЛЕН ОТСТУП) --- */
+        /* --- КОНТЕНТ (ИСПРАВЛЕНО: УБРАНЫ ВСЕ ОТСТУПЫ) --- */
         .layout-content {
             flex: 1; 
             overflow-y: auto; 
@@ -91,11 +92,8 @@
             width: 100%; 
             position: relative; 
             padding: 0;
-            /* Исправлено: уменьшен padding-bottom с 100px до 24px, чтобы убрать белую дыру снизу */
-            padding-bottom: 24px; 
+            padding-bottom: 0 !important; /* ЖЕСТКО УБРАЛ ОТСТУП */
         }
-        /* В режимах викторины/карточек нам нужен отступ под футер, добавляем его динамически через JS или спец класс, если нужно, но пока 100px там не обязательно */
-        
         .layout-content::-webkit-scrollbar { display: none; }
 
         /* --- ФУТЕР --- */
@@ -111,7 +109,7 @@
 
         /* --- ПОИСК И ПОДСВЕТКА --- */
         mark { 
-            background-color: #3b82f6; /* blue-500 */
+            background-color: #3b82f6; 
             color: white; 
             border-radius: 4px; 
             padding: 0 2px;
@@ -148,7 +146,7 @@
         
         .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 
-        /* --- АНИМАЦИИ И КАРТОЧКИ --- */
+        /* --- АНИМАЦИИ --- */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translate3d(0,0,0); }
@@ -863,10 +861,10 @@ function renderMenuContent() {
 }
 
 function renderLearnContent() {
-    // FIX: Класс visible теперь добавляется только если есть реальный текст (trim().length > 0)
     const isSearchVisible = state.searchQuery && state.searchQuery.trim().length > 0;
     
-    return `<div class="p-4 space-y-4 pb-20 animate-fade-in min-h-[50vh] flex flex-col h-full">
+    // ИСПРАВЛЕНИЕ: Убрал pb-20, mb-4. Теперь h-full и flex flex-col, чтобы заполнить весь экран без дыр.
+    return `<div class="p-4 space-y-4 h-full flex flex-col animate-fade-in">
         <div class="flex gap-2 mb-2 items-center shrink-0 z-20 bg-slate-50 dark:bg-black py-1">
             <div class="relative flex-1">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i data-lucide="search" class="w-4 h-4 text-slate-400"></i></div>
@@ -892,7 +890,7 @@ function renderLearnContent() {
         <div id="learn-list-container" 
              onscroll="document.activeElement?.blur()"
              ontouchstart="if(document.activeElement.tagName==='INPUT') document.activeElement.blur()"
-             class="learn-container transition-opacity duration-200 flex-1 overflow-y-auto -mx-4 px-4 pb-20">
+             class="learn-container transition-opacity duration-200 flex-1 overflow-y-auto -mx-4 px-4 pb-0">
         </div>
     </div>`;
 }
@@ -925,6 +923,7 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
+            <!-- Добавляем распорку ТОЛЬКО здесь, чтобы футер не перекрывал контент в тесте -->
             <div class="h-[100px] w-full shrink-0"></div>
         </div>
     </div>`;
