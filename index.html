@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <!-- interactive-widget=resizes-content обязателен для iOS, чтобы клавиатура сжимала окно, а не накладывалась -->
+    <!-- interactive-widget=resizes-content нужен для правильной работы клавиатуры в Конспекте -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -41,10 +41,9 @@
         /* --- БАЗА --- */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
-        /* ФОН И ВЫСОТА: Жесткая фиксация, цвет фона совпадает с приложением (slate-50) */
         html {
             height: 100dvh;
-            background-color: #f8fafc; /* bg-slate-50 */
+            background-color: #f8fafc; 
             overscroll-behavior: none;
         }
         body {
@@ -54,7 +53,7 @@
             height: 100dvh;
             overflow: hidden; 
             overscroll-behavior: none;
-            background-color: #f8fafc; /* bg-slate-50 */
+            background-color: #f8fafc;
             color: #000; font-family: 'Inter', sans-serif;
         }
         .dark html, .dark body { background-color: #000; }
@@ -84,7 +83,7 @@
         }
         .dark .layout-header { border-bottom: 1px solid rgba(255,255,255,0.1); }
 
-        /* --- КОНТЕНТ (ИСПРАВЛЕНО: УБРАНЫ ВСЕ ОТСТУПЫ) --- */
+        /* --- КОНТЕНТ --- */
         .layout-content {
             flex: 1; 
             overflow-y: auto; 
@@ -92,8 +91,16 @@
             width: 100%; 
             position: relative; 
             padding: 0;
-            padding-bottom: 0 !important; /* ЖЕСТКО УБРАЛ ОТСТУП */
+            /* ВОЗВРАЩАЕМ БАЗОВЫЙ ОТСТУП для Тестов и Карточек */
+            padding-bottom: 100px; 
         }
+
+        /* --- ЛОКАЛЬНОЕ ИСПРАВЛЕНИЕ ДЛЯ РЕЖИМА "LEARN" (КОНСПЕКТ) --- */
+        /* Убираем отступ только когда активен режим learn */
+        #app[data-view="learn"] .layout-content {
+            padding-bottom: 0 !important;
+        }
+
         .layout-content::-webkit-scrollbar { display: none; }
 
         /* --- ФУТЕР --- */
@@ -562,13 +569,26 @@ function startMode(mode, resume=false) {
     if(resume && (!state.playableQuestions || state.playableQuestions.length === 0)) resume = false;
     if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
     
-    let q = QUESTIONS_DATA.filter(x => state.selectedTopics.includes(x.topic));
-    if (mode==='mistakes') q = q.filter(x => state.userProgress && state.userProgress[x.id]?.status==='wrong');
+    // ИСПРАВЛЕНИЕ ЛОГИКИ ОШИБОК:
+    // Если режим 'mistakes', мы берем ВСЕ ошибки, игнорируя фильтр тем.
+    // Если режим 'quiz' или 'cards', мы учитываем фильтр тем.
+    let q;
+    
+    if (mode === 'mistakes') {
+        // Берем все вопросы, у которых статус wrong в прогрессе
+        q = QUESTIONS_DATA.filter(x => state.userProgress && state.userProgress[x.id]?.status === 'wrong');
+    } else {
+        // Обычная логика: фильтр по темам
+        q = QUESTIONS_DATA.filter(x => state.selectedTopics.includes(x.topic));
+    }
+
+    // Если это квиз или карточки, убираем уже решенные (correct)
     if (mode === 'quiz' || mode === 'cards') {
         const unsolved = q.filter(question => { const p = state.userProgress[question.id]; return !p || p.status !== 'correct'; });
         if (unsolved.length > 0) q = unsolved;
     }
-    if(!q.length){ alert("Нет вопросов!"); return; }
+    
+    if(!q.length){ alert(mode === 'mistakes' ? "Нет ошибок!" : "Нет вопросов!"); return; }
     
     // Сброс для конспектов
     if (mode === 'learn') {
@@ -863,7 +883,7 @@ function renderMenuContent() {
 function renderLearnContent() {
     const isSearchVisible = state.searchQuery && state.searchQuery.trim().length > 0;
     
-    // ИСПРАВЛЕНИЕ: Убрал pb-20, mb-4. Теперь h-full и flex flex-col, чтобы заполнить весь экран без дыр.
+    // ВЕРНУЛ h-full и flex-col, но убрал все лишние отступы
     return `<div class="p-4 space-y-4 h-full flex flex-col animate-fade-in">
         <div class="flex gap-2 mb-2 items-center shrink-0 z-20 bg-slate-50 dark:bg-black py-1">
             <div class="relative flex-1">
@@ -923,8 +943,7 @@ function renderQuizContent() {
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
             </div>
-            <!-- Добавляем распорку ТОЛЬКО здесь, чтобы футер не перекрывал контент в тесте -->
-            <div class="h-[100px] w-full shrink-0"></div>
+            <!-- УБРАЛ ПРОЗРАЧНУЮ РАСПОРКУ ПО ВАШЕЙ ПРОСЬБЕ -->
         </div>
     </div>`;
 }
