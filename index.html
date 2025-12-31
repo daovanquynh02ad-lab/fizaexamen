@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <!-- 1. ЗАПРЕТ КЭШИРОВАНИЯ (БАЗОВЫЙ) -->
+    <!-- 1. ЗАПРЕТ КЭШИРОВАНИЯ -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -19,19 +19,16 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Noto+Serif:wght@700&display=swap" rel="stylesheet">
 
-    <!-- 2. ANTI-CACHE: АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ -->
+    <!-- 2. ДИНАМИЧЕСКАЯ ЗАГРУЗКА БАЗЫ ВОПРОСОВ (БЕЗ document.write) -->
     <script>
-        // Этот блок заставляет Telegram перезагрузить страницу с сервера при открытии,
-        // игнорируя жесткий кэш Webview. Работает автоматически.
-        try {
-            if (!sessionStorage.getItem('imed_force_reload')) {
-                sessionStorage.setItem('imed_force_reload', 'true');
-                window.location.reload(true); // Принудительная перезагрузка с сервера
-            }
-        } catch(e) {}
-
-        // Загрузка вопросов с уникальной меткой времени (всегда свежая версия)
-        document.write('<script src="questions.js?v=' + Date.now() + '"><\/script>');
+        // Загружаем questions.js с уникальным timestamp, чтобы избежать кэша.
+        // Делаем это сразу, чтобы к моменту нажатия "Начать" данные были (или грузились).
+        (function() {
+            var script = document.createElement('script');
+            script.src = 'questions.js?v=' + Date.now();
+            script.async = false; // Сохраняем порядок, хотя тут один файл
+            document.head.appendChild(script);
+        })();
     </script>
 
     <style>
@@ -128,6 +125,10 @@
         
         .hidden-force { display: none !important; }
         #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+        /* СТИЛИ ПОИСКА */
+        .search-input::placeholder { color: #94a3b8; }
+        .dark .search-input::placeholder { color: #475569; }
     </style>
     
     <script>
@@ -178,7 +179,6 @@ try { tg.expand(); tg.requestFullscreen(); if(tg.isVerticalSwipesEnabled!==undef
 function haptic(type='light') {
     try {
         if(tg.HapticFeedback) {
-            // Telegram разделяет методы impact и notification. 
             if(type === 'error' || type === 'success' || type === 'warning') {
                 tg.HapticFeedback.notificationOccurred(type);
             } else {
@@ -206,7 +206,16 @@ async function userClickedStart() {
 function finishVideo() { videoFinished = true; checkStateTransition(); }
 
 async function performAccessCheck() {
-    if(typeof physiology_questions==='undefined'){ accessError={type:'file',msg:'Файл questions.js не найден.'};checkStateTransition();return;}
+    // Проверка наличия переменной из questions.js. Если скрипт еще грузится, подождем немного (простая логика)
+    if(typeof physiology_questions==='undefined'){ 
+        // Попытка подождать 500мс, вдруг скрипт догружается
+        await new Promise(r => setTimeout(r, 500));
+        if(typeof physiology_questions==='undefined') {
+            accessError={type:'file',msg:'Файл questions.js не найден или поврежден.'};
+            checkStateTransition();
+            return;
+        }
+    }
     
     currentUserId = tg.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('userId');
     
@@ -262,7 +271,6 @@ async function performAccessCheck() {
         if (!accessData) accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
     }
     
-    // ГАРАНТИРУЕМ, ЧТО ПРОГРЕСС НЕ NULL
     if (!state.userProgress) state.userProgress = {};
     if (!state.selectedTopics) state.selectedTopics = [];
     
@@ -379,9 +387,38 @@ function processQuestions() {
     if (state.selectedTopics.length === 0) state.selectedTopics = [...availableTopics];
 }
 
-const state = { view: 'menu', isDark: false, showFilterModal: false, showResetModal: false, showConfirmResetDialog: false, selectedTopics: [], resetSelectedTopics: [], userProgress: {}, resumeState: null, playableQuestions: [], currentQuestionIndex: 0, quizFinished: false, sessionAnswers: {}, selectedOptions: [], isAnswerChecked: false, lastResult: false, isShuffleEnabled: false, comboStreak: 0, hideAnswersInLearn: false, isFlipped: false, swipeX: 0, animState: 'idle' };
+const state = { 
+    view: 'menu', 
+    isDark: false, 
+    showFilterModal: false, 
+    showResetModal: false, 
+    showConfirmResetDialog: false, 
+    selectedTopics: [], 
+    resetSelectedTopics: [], 
+    userProgress: {}, 
+    resumeState: null, 
+    playableQuestions: [], 
+    currentQuestionIndex: 0, 
+    quizFinished: false, 
+    sessionAnswers: {}, 
+    selectedOptions: [], 
+    isAnswerChecked: false, 
+    lastResult: false, 
+    isShuffleEnabled: false, 
+    comboStreak: 0, 
+    hideAnswersInLearn: false, 
+    isFlipped: false, 
+    swipeX: 0, 
+    animState: 'idle',
+    searchQuery: '' // Новое состояние для поиска
+};
 
-function init() { render(); }
+function init() { 
+    // Очищаем resumeState при старте, так как данные в памяти скорее всего потеряны
+    state.resumeState = null;
+    render(); 
+}
+
 function toggleTheme() {
     haptic('light'); state.isDark = !state.isDark;
     const body=document.documentElement, auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen');
@@ -419,22 +456,16 @@ function toggleSelectAllReset() {
     updateTopicListUI('reset'); updateSelectAllButtonUI('reset'); 
 }
 
-// !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОДТВЕРЖДЕНИЯ СБРОСА !!!
+// !!! ЛОГИКА ПОДТВЕРЖДЕНИЯ СБРОСА !!!
 function confirmReset() {
-    // 1. Проверяем, выбраны ли темы
     if(!state.resetSelectedTopics.length) {
         haptic('error');
         return;
     }
-    
     haptic('warning');
-    
-    // 2. ВАЖНО: Закрываем окно выбора тем, чтобы не было наслоения
+    // Закрываем окно выбора тем, чтобы не было наслоения
     state.showResetModal = false;
-    
-    // 3. Открываем окно подтверждения ("Вы уверены?")
     state.showConfirmResetDialog = true;
-    
     render(); 
 }
 
@@ -460,15 +491,35 @@ function executeFinalReset() {
 }
 
 function cancelReset() {
+    // Возвращаемся к выбору тем, а не в меню
     state.showConfirmResetDialog = false;
+    state.showResetModal = true;
     render();
+    // При возврате нужно обновить UI списка (так как рендер полный, но DOM модального окна пересоздается)
+    setTimeout(() => {
+        updateTopicListUI('reset');
+        updateSelectAllButtonUI('reset');
+    }, 0);
 }
 
+// ОПТИМИЗИРОВАННЫЙ UI СПИСКА ТЕМ
 function updateTopicListUI(mode) {
     const listId = mode === 'filter' ? 'topics-list' : 'reset-topics-list';
     const list = document.getElementById(listId); if(!list) return;
     
     const selectedArr = mode === 'filter' ? state.selectedTopics : state.resetSelectedTopics;
+
+    // Предварительный подсчет статистики, чтобы не бегать по QUESTIONS_DATA в цикле
+    const stats = {};
+    if (mode === 'filter') {
+        QUESTIONS_DATA.forEach(q => {
+            if (!stats[q.topic]) stats[q.topic] = { total: 0, correct: 0 };
+            stats[q.topic].total++;
+            if (state.userProgress && state.userProgress[q.id]?.status === 'correct') {
+                stats[q.topic].correct++;
+            }
+        });
+    }
 
     list.querySelectorAll('button[data-topic]').forEach(btn => {
         const t = btn.getAttribute('data-topic');
@@ -478,9 +529,8 @@ function updateTopicListUI(mode) {
         let btnClass = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click relative";
         
         let progressHtml = '';
-        if (mode === 'filter') {
-            const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
-            const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress && state.userProgress[q.id]?.status === 'correct').length;
+        if (mode === 'filter' && stats[t]) {
+            const { total, correct } = stats[t];
             const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
             
             let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
@@ -534,6 +584,12 @@ function getFilteredQuestions(mode) {
 // !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ STARTMODE !!!
 function startMode(mode, resume=false) {
     haptic('medium');
+    
+    // Если пытаемся продолжить, но данных в памяти нет (после перезагрузки), начинаем сначала
+    if(resume && (!state.playableQuestions || state.playableQuestions.length === 0)) {
+        resume = false;
+    }
+
     if(resume && state.resumeState?.mode===mode){ state.view=mode; render(); return; }
     
     let q = getFilteredQuestions(mode);
@@ -545,25 +601,24 @@ function startMode(mode, resume=false) {
             return !p || p.status !== 'correct'; // Оставляем только те, что НЕ решены или решены НЕВЕРНО
         });
         
-        // Если есть нерешенные вопросы - используем только их
         if (unsolved.length > 0) {
             q = unsolved;
         }
-        // Если unsolved.length === 0, значит тема пройдена полностью. 
-        // В этом случае используем полный список (q) для повторения.
     }
 
     if(!q.length){ alert("Нет вопросов!"); return; }
     
+    // Сброс поиска при входе в режим (для Learn)
+    state.searchQuery = '';
+
     if((mode==='quiz'||mode==='cards') && state.isShuffleEnabled) q = [...q].sort(()=>Math.random()-0.5);
     state.playableQuestions = q;
 
-    // Гарантируем, что userProgress не undefined
     if (!state.userProgress) state.userProgress = {};
 
     state.currentQuestionIndex = 0;
     
-    state.view = mode; // ДОБАВЛЕНО!
+    state.view = mode;
     state.quizFinished = false;
     state.sessionAnswers = {}; 
     state.resumeState = null; 
@@ -579,21 +634,17 @@ function loadStateForIndex(i) {
     const q = state.playableQuestions[i];
     if (!q) return resetQuestionState();
     
-    // 1. Проверяем сессию (текущий прогон)
     if (state.sessionAnswers[i]) {
         const s = state.sessionAnswers[i];
         state.selectedOptions = s.selectedOptions; state.isAnswerChecked = s.isAnswerChecked; state.lastResult = s.lastResult;
         return;
     }
 
-    // ИСПРАВЛЕНИЕ: Если режим "Тест", "Карточки" или "Работа над ошибками", мы НЕ загружаем историю.
-    // Мы хотим дать возможность ответить заново, даже если вопрос уже встречался.
     if (['quiz', 'cards', 'mistakes'].includes(state.view)) {
         resetQuestionState();
         return;
     }
 
-    // 2. Иначе проверяем глобальную историю (на всякий случай для других режимов, если будут)
     const history = state.userProgress && state.userProgress[q.id];
     if (history && history.selected) {
         state.selectedOptions = history.selected;
@@ -617,7 +668,6 @@ function checkAnswer() {
     
     if(!state.userProgress) state.userProgress = {};
     
-    // Если ответили верно, статус меняется на correct (уйдет из ошибок при следующем запуске)
     state.userProgress[q.id]={ status: state.lastResult?'correct':'wrong', attempts: (state.userProgress[q.id]?.attempts||0)+1, selected: [...state.selectedOptions] };
     saveCurrentState(); saveProgressToCloud(); render();
 }
@@ -640,6 +690,19 @@ function goHome() {
     state.view='menu'; render();
 }
 
+// ЛОГИКА ПОИСКА
+function handleSearch(val) {
+    state.searchQuery = val;
+    // При поиске скроллим вверх, чтобы видеть результаты
+    const content = document.querySelector('.layout-content');
+    if (content) content.scrollTop = 0;
+    render();
+}
+function clearSearch() {
+    state.searchQuery = '';
+    render();
+}
+
 function render() {
     const app=document.getElementById('app');
     let scrollTop=0; const cd=document.querySelector('.layout-content');
@@ -655,7 +718,19 @@ function render() {
     app.innerHTML = `${renderHeader()}<div class="layout-content bg-slate-50 dark:bg-black">${bodyHTML}</div>${footerHTML}${state.showFilterModal?renderFilterModal():''}${state.showResetModal?renderResetModal():''}${state.showConfirmResetDialog?renderConfirmResetDialog():''}`;
     
     if(state.view==='cards') setTimeout(initCardEvents,0);
-    if(cd && scrollTop>0) document.querySelector('.layout-content').scrollTop=scrollTop;
+    
+    // Восстанавливаем скролл, если это не поиск (при поиске лучше быть наверху, или можно оставить как есть)
+    if(cd && scrollTop>0 && !state.searchQuery) document.querySelector('.layout-content').scrollTop=scrollTop;
+    
+    // Автофокус на поиск, если он активен и мы перерисовываем
+    if (state.view === 'learn' && state.searchQuery !== '') {
+        const input = document.getElementById('learn-search-input');
+        if(input) {
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+    }
+    
     lucide.createIcons();
 }
 
@@ -709,10 +784,37 @@ function renderMenuContent() {
 }
 
 function renderLearnContent() {
-    const qList=getFilteredQuestions('learn');
-    return `<div class="p-4 space-y-4 pb-20 animate-fade-in">
-        <div class="flex justify-end mb-2"><button onclick="state.hideAnswersInLearn=!state.hideAnswersInLearn;render()" class="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl border btn-click ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-black dark:text-slate-400 dark:border-slate-800'}"><i data-lucide="${state.hideAnswersInLearn?'eye':'eye-off'}" class="w-4 h-4"></i>${state.hideAnswersInLearn?'Ответы':'Скрыть'}</button></div>
-        ${qList.map(q => `
+    let qList = getFilteredQuestions('learn');
+    
+    // ЛОГИКА ПОИСКА (ФИЛЬТРАЦИЯ)
+    const isSearching = state.searchQuery && state.searchQuery.trim().length > 0;
+    if (isSearching) {
+        const query = state.searchQuery.toLowerCase();
+        qList = qList.filter(q => {
+            const inQuestion = q.question.toLowerCase().includes(query);
+            const inOptions = q.options.some(opt => opt.toLowerCase().includes(query));
+            const inTopic = q.topic.toLowerCase().includes(query);
+            return inQuestion || inOptions || inTopic;
+        });
+    }
+
+    return `<div class="p-4 space-y-4 pb-20 animate-fade-in min-h-[50vh]">
+        <!-- ПОИСК И ТОГГЛ ОТВЕТОВ -->
+        <div class="flex gap-2 mb-2 items-center">
+            <div class="relative flex-1">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400"></i>
+                </div>
+                <input id="learn-search-input" type="text" value="${state.searchQuery}" oninput="handleSearch(this.value)" placeholder="Поиск по конспектам" class="search-input w-full pl-9 pr-8 py-2.5 bg-slate-100 dark:bg-slate-900 border border-transparent focus:border-slate-300 dark:focus:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none transition-all placeholder:font-medium">
+                ${state.searchQuery ? `<button onclick="clearSearch()" class="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x-circle" class="w-4 h-4 fill-current opacity-70"></i></button>` : ''}
+            </div>
+            <button onclick="state.hideAnswersInLearn=!state.hideAnswersInLearn;render()" class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl border btn-click transition-colors ${state.hideAnswersInLearn?'bg-black text-white border-black dark:bg-white dark:text-black':'bg-white text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}"><i data-lucide="${state.hideAnswersInLearn?'eye':'eye-off'}" class="w-4 h-4"></i></button>
+        </div>
+
+        ${qList.length === 0 ? 
+            `<div class="flex flex-col items-center justify-center pt-10 text-center opacity-50"><i data-lucide="search-x" class="w-12 h-12 text-slate-300 dark:text-slate-600 mb-2"></i><p class="text-xs font-bold text-slate-400">Ничего не найдено</p></div>` 
+            : 
+            qList.map(q => `
             <div class="border border-black dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-black shadow-sm">
                 <div class="bg-slate-100 dark:bg-slate-900 border-b border-black dark:border-slate-700 p-2 flex justify-between gap-4 px-4"><span class="font-bold text-black dark:text-slate-300 text-[10px] tracking-widest uppercase flex-1">${q.topic}</span><span class="font-bold text-slate-500 dark:text-slate-400 text-[10px]">#${q.id}</span></div>
                 <div class="p-3 border-b border-black dark:border-slate-800 bg-white dark:bg-black">
@@ -722,16 +824,15 @@ function renderLearnContent() {
                 <div class="divide-y divide-black dark:divide-slate-800">
                     ${q.options.map((opt, i) => {
                         if(!opt||!opt.trim())return'';
-                        // Убираем дублирование нумерации (1) или 1. в начале строки)
                         const cleanOpt = opt.replace(/^[\d]+[).]\s*/, '');
                         const isC=q.correctIndices.includes(i); 
-                        // ЦВЕТОВАЯ ЛОГИКА ДЛЯ КОНСПЕКТА (LEARN)
                         let bg="bg-white dark:bg-black text-black dark:text-slate-300"; 
-                        if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] text-black dark:bg-[#FFD700] dark:text-black"; // ЗОЛОТОЙ ФОН И ЧЕРНЫЙ ТЕКСТ ВСЕГДА
+                        if(!state.hideAnswersInLearn&&isC) bg="bg-[#FFD700] text-black dark:bg-[#FFD700] dark:text-black";
                         return `<div class="flex"><div class="w-8 flex-shrink-0 flex items-center justify-center border-r border-black dark:border-slate-800 text-xs font-bold ${bg}">${i+1})</div><div class="flex-1 p-2 text-xs font-medium ${bg}">${cleanOpt}</div></div>`;
                     }).join('')}
                 </div>
-            </div>`).join('')}
+            </div>`).join('')
+        }
     </div>`;
 }
 
@@ -755,11 +856,10 @@ function renderQuizContent() {
                     }
                     else {
                         const sel=state.selectedOptions.includes(i), corr=q.correctIndices.includes(i);
-                        // ЛОГИКА ЦВЕТОВ ПОСЛЕ ПРОВЕРКИ
                         if(sel&&corr) cls+="border-emerald-500 bg-emerald-500 text-white shadow-md"; 
                         else if(sel&&!corr) cls+="border-rose-500 bg-rose-500 text-white shadow-md"; 
-                        else if(!sel&&corr) cls+="border-[3px] border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 font-bold"; // Светлый текст для правильного ответа
-                        else cls+="border-transparent bg-slate-100 text-slate-400 opacity-50 dark:bg-slate-800 dark:text-slate-400"; // Светлее (slate-400) вместо slate-600
+                        else if(!sel&&corr) cls+="border-[3px] border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 font-bold";
+                        else cls+="border-transparent bg-slate-100 text-slate-400 opacity-50 dark:bg-slate-800 dark:text-slate-400";
                     }
                     return `<button onclick="handleOptionSelect(${i})" ${state.isAnswerChecked?'disabled':''} class="${cls}">${opt}</button>`;
                 }).join('')}
@@ -843,7 +943,7 @@ function renderCardsFooter() {
 function renderFilterModal() {
     if(!state.showFilterModal) return '';
     const allSel=state.selectedTopics.length===availableTopics.length;
-    const counts={}; QUESTIONS_DATA.forEach(q=>{counts[q.topic]=(counts[q.topic]||0)+1});
+    // Оптимизация: статистика считается внутри updateTopicListUI
     return `<div class="absolute inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onclick="if(event.target===this) toggleFilterModal(false)">
         <div class="bg-white dark:bg-slate-900 w-full sm:w-[400px] sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl flex flex-col h-[85vh] mb-0 sm:mb-4 animate-slide-up">
             <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Фильтр</h3><button onclick="toggleFilterModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
@@ -851,25 +951,11 @@ function renderFilterModal() {
             <div id="topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="select-all-btn" onclick="toggleSelectAllTopics()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
                 ${availableTopics.map(t=>{
-                    const sel=state.selectedTopics.includes(t);
-                    // РАСЧЕТ ПРОГРЕССА ДЛЯ ИНИЦИАЛЬНОГО РЕНДЕРА
-                    const total = QUESTIONS_DATA.filter(q => q.topic === t).length;
-                    const correct = QUESTIONS_DATA.filter(q => q.topic === t && state.userProgress && state.userProgress[q.id]?.status === 'correct').length;
-                    const progress = total > 0 ? Math.round((correct / total) * 100) : 0;
-                    
-                    let barBg = sel ? 'bg-white/20 dark:bg-black/20' : 'bg-slate-200 dark:bg-slate-700';
-                    let fillBg = sel ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-emerald-500';
-                    let txtColor = sel ? 'text-white/60 dark:text-black/60' : 'text-slate-400';
-
-                    const progressHtml = `
-                        <div class="w-full h-1.5 ${barBg} rounded-full mt-2 overflow-hidden"><div class="h-full ${fillBg} rounded-full" style="width: ${progress}%"></div></div>
-                        <div class="text-[10px] ${txtColor} mt-1 flex justify-between"><span>Прогресс</span><span>${progress}%</span></div>
-                    `;
-
-                    return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black border border-transparent relative':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span>${progressHtml}</div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>':''}</div></button>`
+                    // Рендерим болванки, контент заполнится в updateTopicListUI для производительности
+                    return`<button data-topic="${t}" onclick="toggleTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area"></div></button>`
                 }).join('')}
             </div>
-            <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить (${state.selectedTopics.length})</button>
+            <button id="apply-btn" onclick="toggleFilterModal(false)" class="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-bold text-lg shrink-0 btn-click">Применить</button>
         </div>
     </div>`;
 }
@@ -882,9 +968,9 @@ function renderResetModal() {
             <div class="flex justify-between items-center mb-4 shrink-0"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Сброс прогресса</h3><button onclick="toggleResetModal(false)" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 btn-click"><i data-lucide="x" class="w-5 h-5"></i></button></div>
             <div id="reset-topics-list" class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
                 <button id="reset-select-all-btn" onclick="toggleSelectAllReset()" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-between items-center btn-click"><span>${allSel?'Снять выделение':'Выбрать все'}</span><i data-lucide="${allSel?'trash-2':'layers'}" class="w-4 h-4"></i></button>
-                ${availableTopics.map(t=>{const sel=state.resetSelectedTopics.includes(t);return`<button data-topic="${t}" onclick="toggleResetTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click ${sel?'bg-black text-white dark:bg-white dark:text-black border border-transparent relative':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative'}"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area">${sel?'<i data-lucide="check-circle" class="w-4 h-4 absolute top-3 right-3 text-emerald-400 dark:text-emerald-600"></i>':''}</div></button>`}).join('')}
+                ${availableTopics.map(t=>{return`<button data-topic="${t}" onclick="toggleResetTopic('${t}')" class="w-full text-left px-4 py-3 rounded-xl font-bold text-sm flex flex-col gap-1 group btn-click bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 relative"><div class="topic-content w-full"><span class="block text-wrap leading-tight pr-6 mb-1">${t}</span></div><div class="icon-area"></div></button>`}).join('')}
             </div>
-            <button id="confirm-reset-btn" onclick="confirmReset()" class="w-full py-4 bg-rose-500 text-white rounded-2xl font-bold text-lg shrink-0 btn-click shadow-lg shadow-rose-500/30">Сбросить (${state.resetSelectedTopics.length})</button>
+            <button id="confirm-reset-btn" onclick="confirmReset()" class="w-full py-4 bg-rose-500 text-white rounded-2xl font-bold text-lg shrink-0 btn-click shadow-lg shadow-rose-500/30">Сбросить</button>
         </div>
     </div>`;
 }
