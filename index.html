@@ -264,53 +264,43 @@ window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка з�
 
 // --- УМНАЯ ФУНКЦИЯ ПОИСКА ID (Добавлено для фикса ошибки "Только в Телеграм") ---
 // --- БРОНЕБОЙНАЯ ФУНКЦИЯ ПОИСКА ID (ВЕРСИЯ 3.0) ---
+// --- ФУНКЦИЯ ПОИСКА ID (ВЕРСИЯ 5.0) ---
 function getTelegramUserId() {
     try {
-        // СПОСОБ 1: Стандартный (работает у 90% людей)
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
             return window.Telegram.WebApp.initDataUnsafe.user.id;
         }
     } catch (e) {}
-
     try {
-        // СПОСОБ 2: Парсинг initData (если объект user пустой)
         const tg = window.Telegram.WebApp;
         if (tg && tg.initData) {
             const urlParams = new URLSearchParams(tg.initData);
             const userStr = urlParams.get('user');
-            if (userStr) {
-                return JSON.parse(userStr).id;
-            }
+            if (userStr) return JSON.parse(userStr).id;
         }
     } catch (e) {}
-
     try {
-        // СПОСОБ 3: Поиск в адресной строке (ДЛЯ СТАРЫХ ТЕЛЕФОНОВ)
-        // Иногда телеграм кидает данные в хеш (#tgWebAppData=...)
         let hash = window.location.hash;
         if (hash.startsWith('#')) hash = hash.substring(1);
-        
         const params = new URLSearchParams(hash);
         let tgWebAppData = params.get('tgWebAppData');
-        
         if (tgWebAppData) {
             tgWebAppData = decodeURIComponent(tgWebAppData);
             const dataParams = new URLSearchParams(tgWebAppData);
             const userStr = dataParams.get('user');
-            if (userStr) {
-                return JSON.parse(userStr).id;
-            }
+            if (userStr) return JSON.parse(userStr).id;
         }
     } catch (e) {}
-
     return null;
 }
 
-// --- ОСНОВНАЯ ПРОВЕРКА ---
-let accessCheckAttempts = 0;
+// --- НАСТРОЙКИ ОЖИДАНИЯ ---
+let idSearchAttempts = 0;     // Попытки найти ID внутри телефона
+let serverCheckAttempts = 0;  // Попытки достучаться до Гугла
+const MAX_SERVER_RETRIES = 12; // 12 раз по 2 секунды = 24 секунды ожидания
 
 async function performAccessCheck() {
-    // Ждем загрузки вопросов (не трогаем)
+    // 1. Ждем, пока загрузятся вопросы (техническая часть)
     if(!window.isQuestionsLoaded) {
         if(window.questionsLoadError) { 
             accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; 
@@ -321,42 +311,40 @@ async function performAccessCheck() {
         return; 
     }
     
-    // Пытаемся найти ID
+    // 2. Ищем ID
     currentUserId = getTelegramUserId();
 
-    // Если не нашли — пробуем еще 5 раз по 0.5 сек (даем телефону "протупить")
-    if (!currentUserId && accessCheckAttempts < 5) {
-        accessCheckAttempts++;
-        setTimeout(performAccessCheck, 500);
+    // Если телефон тупит и не дает ID сразу - ждем
+    if (!currentUserId && idSearchAttempts < 5) {
+        idSearchAttempts++;
+        setTimeout(performAccessCheck, 400);
         return;
     }
 
-    // Если тестируем на компе без телеграма (раскомментируй для тестов)
-    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user';
-
-    // Обычная проверка (файл)
+    // Тест на компе (раскомментировать при разработке)
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
     
-    // ЕСЛИ ВСЕ РАВНО НЕ НАШЛИ
     if(!currentUserId){ 
-        // Выводим отладочную инфу, чтобы понять, что видит телефон
-        const debugInfo = window.location.hash || "no-hash";
-        console.log("Auth failed. Hash:", debugInfo);
-        
-        accessError={type:'browser',msg:'Не удалось определить пользователя. Попробуйте обновить Telegram.'};
+        console.log("Auth failed. Hash:", window.location.hash);
+        accessError={type:'browser',msg:'Не удалось определить пользователя. Зайдите через Telegram.'};
         checkStateTransition();
         return;
     }
     
-    // ДАЛЬШЕ СТАНДАРТНАЯ ЛОГИКА (НЕ МЕНЯЛАСЬ)
     const ck = `imed_access_v2_${currentUserId}`; 
 
     try{
-        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
-        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}`,{signal:ctrl.signal});
+        // Тайм-аут запроса
+        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(), 20000);
+        
+        // Важно: nocache чтобы не брать старый отказ
+        const uniqueUrl = `${GOOGLE_SCRIPT_URL}?userId=${currentUserId}&nocache=${Date.now()}`;
+        
+        const res=await fetch(uniqueUrl, {signal:ctrl.signal});
         const data=await res.json();
         
         if(data.allowed){ 
+            // === УСПЕХ ===
             accessData=data; 
             if (data.progress) state.userProgress = data.progress;
             else { const localP=localStorage.getItem(`imed_progress_${currentUserId}`); if(localP) state.userProgress=JSON.parse(localP); }
@@ -369,10 +357,31 @@ async function performAccessCheck() {
             localStorage.setItem(`imed_topics_${currentUserId}`, JSON.stringify(state.selectedTopics));
             processQuestions(); 
         } else {
+            // === ОТКАЗ (Пока что) ===
+            
+            // Если Гугл говорит "НЕТ", мы пробуем еще 12 раз (всего около 25 секунд)
+            if (serverCheckAttempts < MAX_SERVER_RETRIES) {
+                serverCheckAttempts++;
+                console.log(`Retrying server check... (${serverCheckAttempts}/${MAX_SERVER_RETRIES})`);
+                
+                // Обновляем текст на экране, чтобы юзер не паниковал
+                const loadDiv = document.getElementById('auth-screen');
+                if(loadDiv) {
+                    const p = loadDiv.querySelector('p');
+                    if(p) p.innerText = `Активация доступа... ${Math.round((serverCheckAttempts/MAX_SERVER_RETRIES)*100)}%`;
+                }
+                
+                // Ждем 2 секунды и пробуем снова
+                setTimeout(performAccessCheck, 2000); 
+                return;
+            }
+
+            // Если прошло 25 секунд, а доступа всё нет — тогда удаляем
             localStorage.removeItem(ck);
-            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
+            accessError={type:'denied', msg:'Доступ еще не активирован. Подождите пару минут или напишите админу.'};
         }
     } catch(e){ 
+        // Ошибка сети или старые данные
         const c = localStorage.getItem(ck);
         const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
         const localT = localStorage.getItem(`imed_topics_${currentUserId}`);
@@ -387,7 +396,16 @@ async function performAccessCheck() {
                 } 
             } catch(err){ localStorage.removeItem(ck); } 
         }
-        if (!accessData) accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
+        
+        // Если это была ошибка сети при проверке, тоже пробуем повторить пару раз
+        if (!accessData) {
+             if (serverCheckAttempts < MAX_SERVER_RETRIES) {
+                serverCheckAttempts++;
+                setTimeout(performAccessCheck, 2000);
+                return;
+             }
+             accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
+        }
     }
     
     if (!state.userProgress) state.userProgress = {};
