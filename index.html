@@ -263,65 +263,92 @@ window.onQuestionsReady = () => { if(accessData || videoFinished) performAccessC
 window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); };
 
 // --- УМНАЯ ФУНКЦИЯ ПОИСКА ID (Добавлено для фикса ошибки "Только в Телеграм") ---
+// --- БРОНЕБОЙНАЯ ФУНКЦИЯ ПОИСКА ID (ВЕРСИЯ 3.0) ---
 function getTelegramUserId() {
-    // Способ 1: Стандартный
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) {
-        return tg.initDataUnsafe.user.id;
-    }
-    // Способ 2: Парсинг строки (помогает на ПК)
     try {
-        if (tg.initData) {
+        // СПОСОБ 1: Стандартный (работает у 90% людей)
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+            return window.Telegram.WebApp.initDataUnsafe.user.id;
+        }
+    } catch (e) {}
+
+    try {
+        // СПОСОБ 2: Парсинг initData (если объект user пустой)
+        const tg = window.Telegram.WebApp;
+        if (tg && tg.initData) {
             const urlParams = new URLSearchParams(tg.initData);
             const userStr = urlParams.get('user');
             if (userStr) {
-                const userObj = JSON.parse(userStr);
-                if (userObj.id) return userObj.id;
+                return JSON.parse(userStr).id;
             }
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {}
+
+    try {
+        // СПОСОБ 3: Поиск в адресной строке (ДЛЯ СТАРЫХ ТЕЛЕФОНОВ)
+        // Иногда телеграм кидает данные в хеш (#tgWebAppData=...)
+        let hash = window.location.hash;
+        if (hash.startsWith('#')) hash = hash.substring(1);
+        
+        const params = new URLSearchParams(hash);
+        let tgWebAppData = params.get('tgWebAppData');
+        
+        if (tgWebAppData) {
+            tgWebAppData = decodeURIComponent(tgWebAppData);
+            const dataParams = new URLSearchParams(tgWebAppData);
+            const userStr = dataParams.get('user');
+            if (userStr) {
+                return JSON.parse(userStr).id;
+            }
+        }
+    } catch (e) {}
+
     return null;
 }
 
-// --- ОСНОВНАЯ ПРОВЕРКА ДОСТУПА ---
+// --- ОСНОВНАЯ ПРОВЕРКА ---
 let accessCheckAttempts = 0;
 
 async function performAccessCheck() {
-    // 1. Ждем загрузки вопросов
+    // Ждем загрузки вопросов (не трогаем)
     if(!window.isQuestionsLoaded) {
         if(window.questionsLoadError) { 
             accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; 
             checkStateTransition(); 
             return; 
         }
-        // Если вопросы еще не загрузились, ждем чуть-чуть
         setTimeout(performAccessCheck, 100);
         return; 
     }
     
-    // 2. Пытаемся получить ID пользователя
+    // Пытаемся найти ID
     currentUserId = getTelegramUserId();
 
-    // -- ФИКС ДЛЯ ПК И МЕДЛЕННОГО ИНЕТА --
-    // Если ID не найден, даем телеграму еще шанс (делаем 3 попытки по 0.3 сек)
-    if (!currentUserId && accessCheckAttempts < 3) {
+    // Если не нашли — пробуем еще 5 раз по 0.5 сек (даем телефону "протупить")
+    if (!currentUserId && accessCheckAttempts < 5) {
         accessCheckAttempts++;
-        console.log("Telegram ID not found, retrying...", accessCheckAttempts);
-        setTimeout(performAccessCheck, 300);
+        setTimeout(performAccessCheck, 500);
         return;
     }
-    
-    // ДЛЯ ТЕСТОВ НА КОМПЕ (Раскомментируй эту строку, если проверяешь просто в браузере Chrome)
-    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user'; 
 
+    // Если тестируем на компе без телеграма (раскомментируй для тестов)
+    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user';
+
+    // Обычная проверка (файл)
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
     
-    // Если после всех попыток ID нет — тогда ошибка
+    // ЕСЛИ ВСЕ РАВНО НЕ НАШЛИ
     if(!currentUserId){ 
-        accessError={type:'browser',msg:'Не удалось определить пользователя. Зайдите через Telegram.'};
+        // Выводим отладочную инфу, чтобы понять, что видит телефон
+        const debugInfo = window.location.hash || "no-hash";
+        console.log("Auth failed. Hash:", debugInfo);
+        
+        accessError={type:'browser',msg:'Не удалось определить пользователя. Попробуйте обновить Telegram.'};
         checkStateTransition();
         return;
     }
     
+    // ДАЛЬШЕ СТАНДАРТНАЯ ЛОГИКА (НЕ МЕНЯЛАСЬ)
     const ck = `imed_access_v2_${currentUserId}`; 
 
     try{
