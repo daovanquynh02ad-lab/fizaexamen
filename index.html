@@ -262,17 +262,65 @@ function finishVideo() { videoFinished = true; checkStateTransition(); }
 window.onQuestionsReady = () => { if(accessData || videoFinished) performAccessCheck(); };
 window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); };
 
+// --- УМНАЯ ФУНКЦИЯ ПОИСКА ID (Добавлено для фикса ошибки "Только в Телеграм") ---
+function getTelegramUserId() {
+    // Способ 1: Стандартный
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) {
+        return tg.initDataUnsafe.user.id;
+    }
+    // Способ 2: Парсинг строки (помогает на ПК)
+    try {
+        if (tg.initData) {
+            const urlParams = new URLSearchParams(tg.initData);
+            const userStr = urlParams.get('user');
+            if (userStr) {
+                const userObj = JSON.parse(userStr);
+                if (userObj.id) return userObj.id;
+            }
+        }
+    } catch (e) { console.error(e); }
+    return null;
+}
+
+// --- ОСНОВНАЯ ПРОВЕРКА ДОСТУПА ---
+let accessCheckAttempts = 0;
+
 async function performAccessCheck() {
+    // 1. Ждем загрузки вопросов
     if(!window.isQuestionsLoaded) {
-        if(window.questionsLoadError) { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); return; }
+        if(window.questionsLoadError) { 
+            accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; 
+            checkStateTransition(); 
+            return; 
+        }
+        // Если вопросы еще не загрузились, ждем чуть-чуть
+        setTimeout(performAccessCheck, 100);
         return; 
     }
     
-    currentUserId = tg.initDataUnsafe?.user?.id;
-    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user'; // DEV ONLY
+    // 2. Пытаемся получить ID пользователя
+    currentUserId = getTelegramUserId();
+
+    // -- ФИКС ДЛЯ ПК И МЕДЛЕННОГО ИНЕТА --
+    // Если ID не найден, даем телеграму еще шанс (делаем 3 попытки по 0.3 сек)
+    if (!currentUserId && accessCheckAttempts < 3) {
+        accessCheckAttempts++;
+        console.log("Telegram ID not found, retrying...", accessCheckAttempts);
+        setTimeout(performAccessCheck, 300);
+        return;
+    }
+    
+    // ДЛЯ ТЕСТОВ НА КОМПЕ (Раскомментируй эту строку, если проверяешь просто в браузере Chrome)
+    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user'; 
 
     if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
-    if(!currentUserId){ accessError={type:'browser',msg:'Зайдите через Telegram.'};checkStateTransition();return;}
+    
+    // Если после всех попыток ID нет — тогда ошибка
+    if(!currentUserId){ 
+        accessError={type:'browser',msg:'Не удалось определить пользователя. Зайдите через Telegram.'};
+        checkStateTransition();
+        return;
+    }
     
     const ck = `imed_access_v2_${currentUserId}`; 
 
