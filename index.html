@@ -177,6 +177,42 @@
         #start-text { z-index: 10000; cursor: pointer; position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         .hidden-force { display: none !important; }
         #app { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+        /* --- СТИЛИ ДЛЯ ЗАГРУЗКИ (APPLE STYLE) --- */
+        .ios-progress-wrapper {
+            width: 220px;
+            height: 6px;
+            background-color: rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+            display: none; /* Скрыто по умолчанию */
+        }
+        .dark .ios-progress-wrapper { background-color: rgba(255,255,255,0.15); }
+
+        .ios-progress-fill {
+            height: 100%;
+            background-color: #007AFF; /* Apple Blue */
+            width: 0%;
+            border-radius: 10px;
+            transition: width 0.3s ease-out;
+        }
+        .ios-loading-text {
+            font-size: 13px; font-weight: 500; color: #8e8e93; margin-top: 10px;
+            font-family: -apple-system, sans-serif; display: none;
+        }
+
+        /* Кнопка "Я оплатил" */
+        .check-payment-btn {
+            background-color: #007AFF; color: white;
+            font-weight: 600; font-size: 15px;
+            padding: 12px 24px; rounded-radius: 14px; /* Округлая */
+            border-radius: 14px;
+            border: none; margin-top: 15px;
+            cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+            box-shadow: 0 4px 15px rgba(0,122,255,0.3);
+        }
+        .check-payment-btn:active { transform: scale(0.96); opacity: 0.8; }
     </style>
     
     <script>
@@ -196,14 +232,33 @@
         </div>
     </div>
     
-    <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
-        <div class="animate-spin text-indigo-600 mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
-        <p class="text-slate-500 font-medium">Проверка доступа...</p>
+   <div id="auth-screen" class="hidden-force bg-slate-50 dark:bg-black">
+    <!-- Иконка -->
+    <div class="mb-4 text-slate-300 dark:text-slate-700">
+        <i data-lucide="lock" class="w-12 h-12"></i>
+    </div>
+    <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-1">Imed Physiology</h3>
+    
+    <!-- Блок с кнопкой (показываем, если не нашли оплату сразу) -->
+    <div id="manual-check-block" class="hidden-force flex flex-col items-center">
+        <p class="text-slate-500 text-sm font-medium mb-1">Доступ не найден</p>
+        <button onclick="startDeepCheck()" class="check-payment-btn">
+            🔄 Я оплатил, проверить
+        </button>
     </div>
 
-    <div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center"></div>
+    <!-- Блок с полоской (показываем, когда нажали кнопку) -->
+    <div id="progress-container" class="flex flex-col items-center w-full">
+        <div class="ios-progress-wrapper" id="p-bar-wrap">
+            <div id="progress-bar-fill" class="ios-progress-fill"></div>
+        </div>
+        <p id="auth-status-text" class="ios-loading-text">Синхронизация...</p>
+    </div>
+</div>
 
-    <div id="app" class="hidden-force"></div>
+<div id="block-screen" class="hidden-force bg-slate-50 dark:bg-black p-6 text-center"></div>
+
+<div id="app" class="hidden-force"></div>
 </div>
 
 <script>
@@ -262,137 +317,175 @@ function finishVideo() { videoFinished = true; checkStateTransition(); }
 window.onQuestionsReady = () => { if(accessData || videoFinished) performAccessCheck(); };
 window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; checkStateTransition(); };
 
-// --- УМНАЯ ФУНКЦИЯ ПОИСКА ID (Добавлено для фикса ошибки "Только в Телеграм") ---
-// --- БРОНЕБОЙНАЯ ФУНКЦИЯ ПОИСКА ID (ВЕРСИЯ 3.0) ---
+
+// --- 1. ПОИСК ID (АГРЕССИВНЫЙ/БРОНЕБОЙНЫЙ) ---
 function getTelegramUserId() {
+    // 1. Стандартный способ (Самый чистый)
     try {
-        // СПОСОБ 1: Стандартный (работает у 90% людей)
-        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+        if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
             return window.Telegram.WebApp.initDataUnsafe.user.id;
         }
     } catch (e) {}
 
+    // 2. Парсинг initData (Иногда user там, но объект не собран)
     try {
-        // СПОСОБ 2: Парсинг initData (если объект user пустой)
-        const tg = window.Telegram.WebApp;
-        if (tg && tg.initData) {
-            const urlParams = new URLSearchParams(tg.initData);
-            const userStr = urlParams.get('user');
-            if (userStr) {
-                return JSON.parse(userStr).id;
-            }
+        if (window.Telegram?.WebApp?.initData) {
+            const params = new URLSearchParams(window.Telegram.WebApp.initData);
+            const userStr = params.get('user');
+            if (userStr) return JSON.parse(userStr).id;
         }
     } catch (e) {}
 
+    // 3. ПОИСК ВЕЗДЕ (В URL, В ХЕШЕ, В СТРОКЕ ЗАПРОСА)
+    // Это лечит ошибку на старых Андроидах и неофициальных клиентах
     try {
-        // СПОСОБ 3: Поиск в адресной строке (ДЛЯ СТАРЫХ ТЕЛЕФОНОВ)
-        // Иногда телеграм кидает данные в хеш (#tgWebAppData=...)
-        let hash = window.location.hash;
-        if (hash.startsWith('#')) hash = hash.substring(1);
+        const fullUrl = window.location.href; // Весь адрес целиком
         
-        const params = new URLSearchParams(hash);
-        let tgWebAppData = params.get('tgWebAppData');
+        // Регулярка: ищет "id":123456789 или %22id%22%3A123456789
+        // Это самый мощный способ найти ID, если он хоть где-то есть
+        const regex = /(?:%22|")id(?:%22|")(?:\:|%3A)(\d+)/;
+        const match = fullUrl.match(regex);
         
-        if (tgWebAppData) {
-            tgWebAppData = decodeURIComponent(tgWebAppData);
-            const dataParams = new URLSearchParams(tgWebAppData);
-            const userStr = dataParams.get('user');
-            if (userStr) {
-                return JSON.parse(userStr).id;
-            }
+        if (match && match[1]) {
+            return parseInt(match[1]);
         }
     } catch (e) {}
 
     return null;
 }
 
-// --- ОСНОВНАЯ ПРОВЕРКА ---
-let accessCheckAttempts = 0;
+// --- ПЕРЕМЕННЫЕ ---
+let currentUserId = null;
+let deepCheckAttempts = 0;
+const MAX_DEEP_RETRIES = 6; // 6 раз по 1.5 сек = 9 секунд
 
+// --- 2. БЫСТРАЯ ПРОВЕРКА (При старте) ---
 async function performAccessCheck() {
-    // Ждем загрузки вопросов (не трогаем)
-    if(!window.isQuestionsLoaded) {
-        if(window.questionsLoadError) { 
-            accessError={type:'file',msg:'Ошибка загрузки базы вопросов.'}; 
-            checkStateTransition(); 
-            return; 
-        }
-        setTimeout(performAccessCheck, 100);
-        return; 
-    }
-    
-    // Пытаемся найти ID
+    if(!window.isQuestionsLoaded) { setTimeout(performAccessCheck, 100); return; }
+
     currentUserId = getTelegramUserId();
-
-    // Если не нашли — пробуем еще 5 раз по 0.5 сек (даем телефону "протупить")
-    if (!currentUserId && accessCheckAttempts < 5) {
-        accessCheckAttempts++;
-        setTimeout(performAccessCheck, 500);
-        return;
-    }
-
-    // Если тестируем на компе без телеграма (раскомментируй для тестов)
-    // if(!currentUserId && window.location.hostname === 'localhost') currentUserId = 'test_user';
-
-    // Обычная проверка (файл)
-    if(window.location.protocol==='file:'){ accessData={allowed:true, progress:{}};processQuestions();checkStateTransition();return;}
     
-    // ЕСЛИ ВСЕ РАВНО НЕ НАШЛИ
+    // Если тестируем на компе как файл
+    if(window.location.protocol==='file:'){ accessData={allowed:true}; processQuestions(); checkStateTransition(); return;}
+
     if(!currentUserId){ 
-        // Выводим отладочную инфу, чтобы понять, что видит телефон
-        const debugInfo = window.location.hash || "no-hash";
-        console.log("Auth failed. Hash:", debugInfo);
-        
         accessError={type:'browser',msg:'Не удалось определить пользователя. Попробуйте обновить Telegram.'};
-        checkStateTransition();
-        return;
+        checkStateTransition(); return;
     }
     
-    // ДАЛЬШЕ СТАНДАРТНАЯ ЛОГИКА (НЕ МЕНЯЛАСЬ)
-    const ck = `imed_access_v2_${currentUserId}`; 
+    // А. ПРОВЕРКА КЭША (Если уже был доступ — пускаем МГНОВЕННО)
+    const ck = `imed_access_v2_${currentUserId}`;
+    const cached = localStorage.getItem(ck);
+    if (cached) {
+        try {
+            const parsed = JSON.parse(cached);
+            if (parsed.allowed) {
+                accessData = parsed;
+                restoreUserProgress();
+                processQuestions();
+                checkStateTransition();
+                return; // Успешный вход из кэша
+            }
+        } catch(e) {}
+    }
 
-    try{
-        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),15000);
-        const res=await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}`,{signal:ctrl.signal});
-        const data=await res.json();
+    // Б. ЕСЛИ КЭША НЕТ — ДЕЛАЕМ 1 БЫСТРЫЙ ЗАПРОС
+    try {
+        const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 10000);
+        const res = await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}&nocache=${Date.now()}`, {signal:ctrl.signal});
+        const data = await res.json();
         
-        if(data.allowed){ 
-            accessData=data; 
-            if (data.progress) state.userProgress = data.progress;
-            else { const localP=localStorage.getItem(`imed_progress_${currentUserId}`); if(localP) state.userProgress=JSON.parse(localP); }
-            
-            if (data.selectedTopics) state.selectedTopics = data.selectedTopics;
-            else { const localT=localStorage.getItem(`imed_topics_${currentUserId}`); if(localT) state.selectedTopics=JSON.parse(localT); }
-            
-            localStorage.setItem(ck,JSON.stringify(data)); 
-            localStorage.setItem(`imed_progress_${currentUserId}`, JSON.stringify(state.userProgress));
-            localStorage.setItem(`imed_topics_${currentUserId}`, JSON.stringify(state.selectedTopics));
-            processQuestions(); 
+        if(data.allowed){
+            saveAndEnter(data); // Ура, вошли
         } else {
-            localStorage.removeItem(ck);
-            accessError={type:'denied', msg:'Доступ закрыт. Обратитесь к администратору.'};
+            showManualCheckButton(); // Нет доступа -> Показываем кнопку
         }
-    } catch(e){ 
-        const c = localStorage.getItem(ck);
-        const localP = localStorage.getItem(`imed_progress_${currentUserId}`);
-        const localT = localStorage.getItem(`imed_topics_${currentUserId}`);
-        if(c){ 
-            try{ 
-                const p=JSON.parse(c); 
-                if(p.allowed){ 
-                    accessData=p; 
-                    if (localP) state.userProgress = JSON.parse(localP);
-                    if (localT) state.selectedTopics = JSON.parse(localT);
-                    processQuestions(); 
-                } 
-            } catch(err){ localStorage.removeItem(ck); } 
-        }
-        if (!accessData) accessError={type:'network', msg:'Ошибка сети. Проверьте интернет.'}; 
+    } catch(e) {
+        showManualCheckButton(); // Ошибка -> Показываем кнопку
     }
+}
+
+// --- 3. ГЛУБОКАЯ ПРОВЕРКА (По нажатию кнопки) ---
+async function startDeepCheck() {
+    // Прячем кнопку, показываем полоску
+    document.getElementById('manual-check-block').classList.add('hidden-force');
+    const pWrap = document.getElementById('p-bar-wrap');
+    const pText = document.getElementById('auth-status-text');
+    if(pWrap) pWrap.style.display = 'block';
+    if(pText) pText.style.display = 'block';
     
-    if (!state.userProgress) state.userProgress = {};
-    if (!state.selectedTopics) state.selectedTopics = [];
+    deepCheckAttempts = 0;
+    runDeepCheckLoop();
+}
+
+async function runDeepCheckLoop() {
+    deepCheckAttempts++;
+    
+    // Двигаем полоску (анимация)
+    const percent = Math.round((deepCheckAttempts / MAX_DEEP_RETRIES) * 90);
+    updateProgressBar(percent, "Проверка оплаты...");
+    
+    try {
+        const res = await fetch(`${GOOGLE_SCRIPT_URL}?userId=${currentUserId}&nocache=${Date.now()}`);
+        const data = await res.json();
+        
+        if (data.allowed) {
+            updateProgressBar(100, "Успешно!");
+            setTimeout(() => saveAndEnter(data), 500); 
+        } else {
+            if (deepCheckAttempts < MAX_DEEP_RETRIES) {
+                setTimeout(runDeepCheckLoop, 1500); // Пробуем снова через 1.5 сек
+            } else {
+                alert("Оплата пока не найдена. Подождите пару минут, если только что оплатили.");
+                showManualCheckButton(); // Возвращаем кнопку
+            }
+        }
+    } catch (e) {
+        if (deepCheckAttempts < MAX_DEEP_RETRIES) setTimeout(runDeepCheckLoop, 1500);
+        else showManualCheckButton();
+    }
+}
+
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+function saveAndEnter(data) {
+    const ck = `imed_access_v2_${currentUserId}`;
+    accessData = data;
+    localStorage.setItem(ck, JSON.stringify(data));
+    restoreUserProgress();
+    processQuestions();
     checkStateTransition();
+}
+
+function restoreUserProgress() {
+    if (accessData.progress) state.userProgress = accessData.progress;
+    else { const localP=localStorage.getItem(`imed_progress_${currentUserId}`); if(localP) state.userProgress=JSON.parse(localP); }
+    if (accessData.selectedTopics) state.selectedTopics = accessData.selectedTopics;
+    else { const localT=localStorage.getItem(`imed_topics_${currentUserId}`); if(localT) state.selectedTopics=JSON.parse(localT); }
+}
+
+function showManualCheckButton() {
+    // Показываем экран загрузки, но вместо лоадера - кнопку
+    const intro = document.getElementById('intro-layer');
+    if(intro) intro.style.display='none';
+    
+    const auth = document.getElementById('auth-screen');
+    const btnBlock = document.getElementById('manual-check-block');
+    const pWrap = document.getElementById('p-bar-wrap');
+    const pText = document.getElementById('auth-status-text');
+    
+    if(auth) auth.classList.remove('hidden-force');
+    if(btnBlock) btnBlock.classList.remove('hidden-force');
+    
+    // Скрываем полоску
+    if(pWrap) pWrap.style.display = 'none';
+    if(pText) pText.style.display = 'none';
+}
+
+function updateProgressBar(percent, text) {
+    const bar = document.getElementById('progress-bar-fill');
+    const txt = document.getElementById('auth-status-text');
+    if (bar) bar.style.width = percent + '%';
+    if (txt) txt.innerText = text;
 }
 
 async function saveProgressToCloud() {
@@ -417,18 +510,48 @@ async function saveProgressToCloud() {
 function checkStateTransition() {
     if(!videoFinished && !accessError) return; 
     const intro=document.getElementById('intro-layer'), auth=document.getElementById('auth-screen'), block=document.getElementById('block-screen'), app=document.getElementById('app');
-    if (videoFinished && !accessData && !accessError) { if(intro) intro.style.display='none'; auth.classList.remove('hidden-force'); return; }
+    
+    // Если всё хорошо - пускаем
+    if (videoFinished && accessData && !accessError) { 
+        if(intro) intro.style.display='none'; 
+        auth.classList.add('hidden-force');
+        block.classList.add('hidden-force');
+        app.classList.remove('hidden-force');
+        init();
+        return; 
+    }
+    
+    // Если есть ошибка (НЕТ ДОСТУПА или БРАУЗЕР)
     if(accessError){ 
         if(intro) intro.style.display='none'; 
-        auth.classList.add('hidden-force'); block.classList.remove('hidden-force');
+        auth.classList.add('hidden-force'); 
+        block.classList.remove('hidden-force'); // Показываем красный экран
+        
         let icon='alert-triangle', title='Ошибка', colorClass='text-rose-500', bgClass='bg-rose-100 dark:bg-rose-900/30';
-        if(accessError.type==='denied'){icon='lock';title='Доступ закрыт';} else if(accessError.type==='browser'){icon='smartphone';title='Только в Telegram';}
-        block.innerHTML=`<div class="flex flex-col items-center justify-center h-full animate-fade-in px-4"><div class="${bgClass} p-6 rounded-full mb-6"><i data-lucide="${icon}" class="w-16 h-16 ${colorClass}"></i></div><h1 class="text-3xl font-black text-slate-900 dark:text-white mb-4">${title}</h1><p class="text-slate-500 dark:text-slate-400 mb-10 max-w-sm font-medium leading-relaxed">${accessError.msg}</p>${accessError.type==='denied'?`<a href="https://t.me/stewonly" class="w-full max-w-xs bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold text-center shadow-lg btn-click transition-transform active:scale-95">Связаться с админом</a>`:`<button onclick="window.location.reload()" class="w-full max-w-xs bg-slate-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Попробовать снова</button>`}</div>`;
-        lucide.createIcons(); return; 
-    }
-    if(accessData){
-        if(intro){ intro.style.transition='opacity 0.3s'; intro.style.opacity='0'; setTimeout(()=>{intro.style.display='none';auth.classList.add('hidden-force');app.classList.remove('hidden-force');init();},300); } 
-        else { auth.classList.add('hidden-force'); app.classList.remove('hidden-force'); init(); }
+        if(accessError.type==='denied'){icon='lock';title='Доступ закрыт';} 
+        else if(accessError.type==='browser'){icon='smartphone';title='Только в Telegram';}
+        
+        // ГЕНЕРИРУЕМ КРАСНЫЙ ЭКРАН С КНОПКОЙ "Я ОПЛАТИЛ"
+        block.innerHTML=`
+            <div class="flex flex-col items-center justify-center h-full animate-fade-in px-4">
+                <div class="${bgClass} p-6 rounded-full mb-6">
+                    <i data-lucide="${icon}" class="w-16 h-16 ${colorClass}"></i>
+                </div>
+                <h1 class="text-3xl font-black text-slate-900 dark:text-white mb-4">${title}</h1>
+                <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-sm font-medium leading-relaxed">
+                    ${accessError.msg}
+                </p>
+                
+                ${accessError.type==='denied' ? 
+                `<button onclick="startDeepCheck()" class="w-full max-w-xs bg-indigo-600 text-white py-4 rounded-2xl font-bold text-center shadow-lg btn-click mb-3">
+                    🔄 Я оплатил, проверить
+                 </button>
+                 <a href="https://t.me/stewonly" class="text-sm font-bold text-slate-400">Написать админу</a>` 
+                : 
+                `<button onclick="window.location.reload()" class="w-full max-w-xs bg-slate-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-lg btn-click">Попробовать снова</button>`}
+            </div>`;
+        lucide.createIcons(); 
+        return; 
     }
 }
 
