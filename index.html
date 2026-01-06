@@ -226,13 +226,15 @@ let learnObserver = null;
 const tg = window.Telegram.WebApp;
 
 // ВЗЯТО ИЗ ВАШЕГО КОДА: Инициализация WebApp
+// --- ИНИЦИАЛИЗАЦИЯ TELEGRAM ---
 try { 
     tg.expand(); 
-    tg.requestFullscreen(); 
+    // Сообщаем телеграму, что приложение готово (важно для получения данных)
+    tg.ready(); 
+    try { tg.requestFullscreen(); } catch(e){}
     if(tg.isVerticalSwipesEnabled!==undefined) tg.isVerticalSwipesEnabled=false; 
     tg.setHeaderColor('#ffffff'); 
 } catch(e){}
-
 // --- HAPTIC & UTILS ---
 function haptic(type='light') {
     try {
@@ -264,43 +266,60 @@ window.onQuestionsError = () => { accessError={type:'file',msg:'Ошибка з�
 
 // --- УМНАЯ ФУНКЦИЯ ПОИСКА ID (Добавлено для фикса ошибки "Только в Телеграм") ---
 // --- БРОНЕБОЙНАЯ ФУНКЦИЯ ПОИСКА ID (ВЕРСИЯ 3.0) ---
+// --- БРОНЕБОЙНАЯ ФУНКЦИЯ ПОИСКА ID (ВЕРСИЯ 4.0) ---
 function getTelegramUserId() {
     try {
-        // СПОСОБ 1: Стандартный (работает у 90% людей)
+        // 1. Самый надежный способ: JS Объект
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
             return window.Telegram.WebApp.initDataUnsafe.user.id;
         }
     } catch (e) {}
 
+    // Вспомогательная функция парсинга строки
+    const parseUserFromStr = (str) => {
+        try {
+            if (!str) return null;
+            const params = new URLSearchParams(str);
+            
+            // Вариант А: Есть параметр user
+            const userStr = params.get('user');
+            if (userStr) return JSON.parse(userStr).id;
+
+            // Вариант Б: Данные упакованы в tgWebAppData (обычно в Web версии)
+            let tgWebAppData = params.get('tgWebAppData');
+            if (tgWebAppData) {
+                tgWebAppData = decodeURIComponent(tgWebAppData);
+                const subParams = new URLSearchParams(tgWebAppData);
+                const subUser = subParams.get('user');
+                if (subUser) return JSON.parse(subUser).id;
+            }
+        } catch (e) {}
+        return null;
+    };
+
     try {
-        // СПОСОБ 2: Парсинг initData (если объект user пустой)
+        // 2. Парсинг initData из объекта (если user пустой, но строка есть)
         const tg = window.Telegram.WebApp;
         if (tg && tg.initData) {
-            const urlParams = new URLSearchParams(tg.initData);
-            const userStr = urlParams.get('user');
-            if (userStr) {
-                return JSON.parse(userStr).id;
-            }
+            const id = parseUserFromStr(tg.initData);
+            if (id) return id;
         }
     } catch (e) {}
 
     try {
-        // СПОСОБ 3: Поиск в адресной строке (ДЛЯ СТАРЫХ ТЕЛЕФОНОВ)
-        // Иногда телеграм кидает данные в хеш (#tgWebAppData=...)
+        // 3. Поиск в Хэше (#tgWebAppData=...)
         let hash = window.location.hash;
         if (hash.startsWith('#')) hash = hash.substring(1);
-        
-        const params = new URLSearchParams(hash);
-        let tgWebAppData = params.get('tgWebAppData');
-        
-        if (tgWebAppData) {
-            tgWebAppData = decodeURIComponent(tgWebAppData);
-            const dataParams = new URLSearchParams(tgWebAppData);
-            const userStr = dataParams.get('user');
-            if (userStr) {
-                return JSON.parse(userStr).id;
-            }
-        }
+        const idHash = parseUserFromStr(hash);
+        if (idHash) return idHash;
+    } catch (e) {}
+
+    try {
+        // 4. Поиск в Query параметрах (?tgWebAppData=...) - ВАЖНО ДЛЯ НЕКОТОРЫХ АНДРОИДОВ
+        let search = window.location.search;
+        if (search.startsWith('?')) search = search.substring(1);
+        const idSearch = parseUserFromStr(search);
+        if (idSearch) return idSearch;
     } catch (e) {}
 
     return null;
@@ -325,7 +344,7 @@ async function performAccessCheck() {
     currentUserId = getTelegramUserId();
 
     // Если не нашли — пробуем еще 5 раз по 0.5 сек (даем телефону "протупить")
-    if (!currentUserId && accessCheckAttempts < 5) {
+    if (!currentUserId && accessCheckAttempts < 10) {
         accessCheckAttempts++;
         setTimeout(performAccessCheck, 500);
         return;
